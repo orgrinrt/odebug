@@ -1,0 +1,14 @@
+[package]
+name = "debug_helpers"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+paste = "1.0.14"
+
+[features]
+default = ["use_workspace"]
+use_workspace = []
