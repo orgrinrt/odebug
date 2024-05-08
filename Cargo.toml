@@ -1,10 +1,7 @@
 [package]
-name = "debug_helpers"
+name = "odebug"
 version = "0.1.0"
 edition = "2021"
-
-[lints]
-workspace = true
 
 [dependencies]
 paste = "1.0.14"
