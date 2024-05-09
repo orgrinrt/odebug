@@ -1,5 +1,6 @@
 [package]
 name = "odebug"
+authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.1.0"
 edition = "2021"
 
