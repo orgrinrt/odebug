@@ -1,0 +1,31 @@
+name: crate cicd - release
+
+on:
+  push:
+    # triggers the workflow when a tag matching the defined pattern is pushed
+    tags:
+      - 'v*.*.*'
+      - 'release-*.*.*'
+    secrets:
+      CRATES_IO_TOKEN:
+        required: true
+      GH_RELEASE_TOKEN:
+        required: true
+
+jobs:
+  audit:
+    uses: orgrinrt/cicd/.github/workflows/crate_audit.yml@v1.0.0
+  
+  call_crate_cicd:
+    needs: [audit]
+    uses: orgrinrt/cicd/.github/workflows/crate_ci.yml@v1.0.0
+    secrets:
+      CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+    with:
+      profile: 'minimal'
+      toolchain: 'stable'
+      components: ''
+      override: true
+      deploy: true
+      tests_path: ''

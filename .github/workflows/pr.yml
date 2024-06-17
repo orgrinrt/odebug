@@ -1,0 +1,24 @@
+name: crate cicd - pull requests
+
+on:
+  pull_request:
+    types: [ synchronize, opened, reopened ]
+    secrets:
+      CRATES_IO_TOKEN:
+        required: false
+      GH_RELEASE_TOKEN:
+        required: false
+
+jobs:
+  call_crate_cicd:
+    uses: orgrinrt/cicd/.github/workflows/crate_ci.yml@v1.0.0
+    secrets:
+      CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+    with:
+      profile: 'minimal'
+      toolchain: 'stable'
+      components: ''
+      override: true
+      deploy: false
+      tests_path: ''
