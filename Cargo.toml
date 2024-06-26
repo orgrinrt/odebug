@@ -1,8 +1,19 @@
 [package]
 name = "odebug"
 authors = ["orgrinrt", "Hiisi Digital"]
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
+description = """
+Debug helper especially for proc-macros, that allows simple and practical logging to a text file the compilation process.
+"""
+license = "MIT"
+license-file = "LICENSE"
+readme = "README.md"
+keywords = ["debug", "print", "log", "proc-macro", "helper"]
+categories = ["development-tools", "development-tools::procedural-macro-helpers", "development-tools::debugging"]
+documentation = "https://docs.rs/odebug"
+homepage = "https://github.com/orgrinrt/odebug"
+repository = "https://github.com/orgrinrt/odebug"
 
 [dependencies]
 paste = "1.0.14"
