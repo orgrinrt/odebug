@@ -1,153 +1,95 @@
+use once_cell::sync::Lazy;
+use std::collections::HashSet;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Once;
 
-pub fn workspace_dir() -> PathBuf {
+pub static WORKSPACE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let output = std::process::Command::new(env!("CARGO"))
         .arg("locate-project")
         .arg("--workspace")
         .arg("--message-format=plain")
         .output()
-        .unwrap()
+        .expect("Failed to run cargo locate-project")
         .stdout;
-    let cargo_path = Path::new(std::str::from_utf8(&output).unwrap().trim());
-    cargo_path.parent().unwrap().to_path_buf()
+    let cargo_path = Path::new(std::str::from_utf8(&output).expect("Invalid UTF-8").trim());
+    cargo_path
+        .parent()
+        .expect("No parent directory")
+        .to_path_buf()
+});
+
+static INIT: Once = Once::new();
+static DEBUG_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    let dir = WORKSPACE_DIR.join(".debug");
+    fs::create_dir_all(&dir).expect("Failed to create debug directory");
+    dir
+});
+
+#[macro_export]
+macro_rules! debug_tokens {
+    ($name:expr, $tokens:expr) => {
+        let content = format!("Token stream: {}", $tokens);
+        $crate::write_to_debug_file(&format!("{}_proc_macro.log", $name), &content, None)
+            .unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e));
+    };
 }
 
-pub fn workspace_dir_str() -> String {
-    let output = std::process::Command::new(env!("CARGO"))
-        .arg("locate-project")
-        .arg("--workspace")
-        .arg("--message-format=plain")
-        .output()
-        .unwrap()
-        .stdout;
-    let cargo_path = Path::new(std::str::from_utf8(&output).unwrap().trim());
-    cargo_path.parent().unwrap().to_str().unwrap().to_string()
+#[macro_export]
+macro_rules! debug_proc {
+    ($name:expr, $content:expr) => {
+        $crate::write_to_debug_file(&format!("{}_proc_macro.log", $name), &$content, None)
+            .unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e));
+    };
+    ($name:expr, $header:expr, $content:expr) => {
+        $crate::write_to_debug_file(
+            &format!("{}_proc_macro.log", $name),
+            &$content,
+            Some($header),
+        )
+        .unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e));
+    };
 }
 
-pub mod __debug_file {
+const SEPARATOR_LINE: &str = "-----------------------------------------------------------";
 
-    pub static mut IS_DEBUG_FILE_REFRESHED: bool = false;
-    pub const __NO_HEADER: &str = "___NOHEAD___";
-    pub const __SEPARATOR_ABOVE: &str = "___SEPART_AB___";
-    pub const __SEPARATOR_BELOW: &str = "___SEPART_BL___";
-    pub const __SEPARATOR: &str = __SEPARATOR_ABOVE;
-    pub const __DEBUG_FILE_NAME: &str = "debug.txt";
-    pub const __DEBUG_OUTPUT_DIR: &str = ".debug";
-    #[cfg(feature = "use_workspace")]
-    pub const __USE_WORKSPACE_DIR: bool = true;
-    #[cfg(not(feature = "use_workspace"))]
-    pub const __USE_WORKSPACE_DIR: bool = false;
+static INITIALIZED_FILES: Lazy<std::sync::Mutex<HashSet<String>>> =
+    Lazy::new(|| std::sync::Mutex::new(HashSet::new()));
 
-    #[macro_export]
-    macro_rules! use_debug_file_deps {
-        () => {
-            use std::env as DBG_OUTPUT_ENV;
-            use std::fs::{remove_file as DBG_OUTPUT_FILE_REMOVER, OpenOptions as DBG_OUTPUT_FILE};
-            use std::io::Write as DBG_OUTPUT_WRITE;
-            use std::path::Path as DBG_OUTPUT_PATH;
+pub fn write_to_debug_file(
+    filename: &str,
+    content: &str,
+    header: Option<&str>,
+) -> std::io::Result<()> {
+    let path = DEBUG_DIR.join(filename);
 
-            use paste::paste as DBG_PASTE;
-            use $crate::__debug_file::{
-                IS_DEBUG_FILE_REFRESHED as DBG_IS_DEBUG_FILE_REFRESHED,
-                __DEBUG_FILE_NAME as DBG_FILE_NAME,
-                __DEBUG_OUTPUT_DIR as DBG_OUTPUT_DIR,
-                __NO_HEADER as DBG_NOHEAD,
-                __SEPARATOR as DBG_SEP,
-                __SEPARATOR_ABOVE as DBG_SEP_ABOVE,
-                __SEPARATOR_BELOW as DBG_SEP_BELOW,
-                __USE_WORKSPACE_DIR as DBG_USE_WORKSPACE_DIR,
-            };
-        };
+    // minimize the lock duration by scoping it
+    let should_clear = {
+        let mut initialized = INITIALIZED_FILES.lock().unwrap();
+        if !initialized.contains(filename) {
+            initialized.insert(filename.to_string());
+            true
+        } else {
+            false
+        }
+    };
+
+    if should_clear {
+        let _ = fs::remove_file(&path);
     }
 
-    #[macro_export]
-    macro_rules! debug_file {
-        (!$fmt_str:expr, $($fmt_args:expr),*) => {
-            let content = format!($fmt_str, $($fmt_args),*);
-                $crate::debug_file!(content, DBG_NOHEAD, __);
-        };
-        ($content:expr, Separator) => {
-                $crate::debug_file!($content, DBG_SEP, __);
-        };
-        ($content:expr, SeparatorBelow) => {
-                $crate::debug_file!($content, DBG_SEP_BELOW, __);
-        };
-        ($content:expr, SeparatorAbove) => {
-                $crate::debug_file!($content, DBG_SEP_ABOVE, __);
-        };
-        ($content:expr) => {
-                $crate::debug_file!($content, DBG_NOHEAD, __);
-        };
-        ($content:expr, $header:expr) => {
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
 
-                $crate::debug_file!($content, $header, __);
-        };
-        ($content:expr, $header:expr, __) => {
-            {
-                $crate::use_debug_file_deps!();
-                DBG_PASTE! {{
-                    let mut expanded_str = "".to_string();
-                    if $header == DBG_SEP_ABOVE {
-                        expanded_str = format!(
-                            "\n--------------------------------------------------------------------------------------\n \
-                            {}",
-                        $content
-                        .to_string());
-                    }
-                    else if $header == DBG_SEP_BELOW {
-                        expanded_str = format!(
-                            "\n {} \
-                            \n--------------------------------------------------------------------------------------",
-                        $content.to_string());
-                    }
-                    else if $header != DBG_NOHEAD {
-                        expanded_str = format!(
-                            "\n--------------------------------------------------------------------------------------\n  \
-                            \t> {} \
-                            \n--------------------------------------------------------------------------------------\n \
-                            {}",
-                            $header.to_string(),
-                            $content.to_string());
-                    }
-                    else {
-                        expanded_str = format!("\n {}",
-                        $content.to_string());
-                    }
-
-                    let workspace_dir = $crate::workspace_dir_str();
-                    let manifest_dir = DBG_OUTPUT_ENV::var("CARGO_MANIFEST_DIR").unwrap();
-                    let crate_name = DBG_OUTPUT_ENV::var("CARGO_CRATE_NAME").unwrap();
-                    let base_dir = if DBG_USE_WORKSPACE_DIR { workspace_dir } else {
-                        manifest_dir };
-                    let debug_path = DBG_OUTPUT_PATH::new(&base_dir)
-                        .join(DBG_OUTPUT_DIR)
-                        .join(format!("{}_{}", crate_name, DBG_FILE_NAME));
-
-                    unsafe {
-                        if !DBG_IS_DEBUG_FILE_REFRESHED {
-                            let mut file = match DBG_OUTPUT_FILE_REMOVER(&debug_path) {
-                                Ok(f) => f,
-                                Err(error) => panic!("Problem removing the file: {:?}", error),
-                            };
-
-                            DBG_IS_DEBUG_FILE_REFRESHED = true;
-                        }
-                    }
-
-                    let mut file = match DBG_OUTPUT_FILE::new().append(true).create(true).open
-                    (&debug_path) {
-                        Ok(f) => f,
-                        Err(error) => panic!("Problem opening the file: {:?}", error),
-                    };
-                    if let Err(error) = file.write_all(expanded_str.as_bytes()) {
-                        panic!("Problem writing to the file(start): {:?}", error);
-                    }
-                    // if let Err(error) = file.write_all(end_str.as_bytes()) {
-                    //     panic!("Problem writing to the file (end): {:?}", error);
-                    // }
-                    }
-                };
-            }
-        };
+    match header {
+        Some(header) => writeln!(
+            file,
+            "\n{0}\n\
+             > {1}\n\
+             {0}\n\
+             {2}",
+            SEPARATOR_LINE, header, content
+        ),
+        None => writeln!(file, "\n{}", content),
     }
 }
