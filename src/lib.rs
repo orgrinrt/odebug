@@ -1,55 +1,92 @@
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
+use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::Once;
+use std::path::PathBuf;
 
-pub static WORKSPACE_DIR: Lazy<PathBuf> = Lazy::new(|| {
-    let output = std::process::Command::new(env!("CARGO"))
-        .arg("locate-project")
-        .arg("--workspace")
-        .arg("--message-format=plain")
-        .output()
-        .expect("Failed to run cargo locate-project")
-        .stdout;
-    let cargo_path = Path::new(std::str::from_utf8(&output).expect("Invalid UTF-8").trim());
-    cargo_path
-        .parent()
-        .expect("No parent directory")
-        .to_path_buf()
+pub static DEBUG_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    let debug_dir = determine_debug_dir();
+    fs::create_dir_all(&debug_dir).unwrap_or_else(|e| {
+        eprintln!("Failed to create debug directory: {}", e);
+    });
+    debug_dir
 });
 
-static INIT: Once = Once::new();
-static DEBUG_DIR: Lazy<PathBuf> = Lazy::new(|| {
-    let dir = WORKSPACE_DIR.join(".debug");
-    fs::create_dir_all(&dir).expect("Failed to create debug directory");
-    dir
-});
+/// Determines the appropriate debug directory based on feature flags
+fn determine_debug_dir() -> PathBuf {
+    #[cfg(feature = "output_to_target")]
+    {
+        find_target_dir()
+            .map(|dir| dir.join("odebug"))
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "Warning: Could not find target directory, falling back to default location"
+                );
+                default_debug_dir()
+            })
+    }
 
-#[macro_export]
-macro_rules! debug_tokens {
-    ($name:expr, $tokens:expr) => {
-        let content = format!("Token stream: {}", $tokens);
-        $crate::write_to_debug_file(&format!("{}_proc_macro.log", $name), &content, None)
-            .unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e));
-    };
+    #[cfg(not(feature = "output_to_target"))]
+    {
+        default_debug_dir()
+    }
 }
 
-#[macro_export]
-macro_rules! debug_proc {
-    ($name:expr, $content:expr) => {
-        $crate::write_to_debug_file(&format!("{}_proc_macro.log", $name), &$content, None)
-            .unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e));
-    };
-    ($name:expr, $header:expr, $content:expr) => {
-        $crate::write_to_debug_file(
-            &format!("{}_proc_macro.log", $name),
-            &$content,
-            Some($header),
-        )
-        .unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e));
-    };
+/// Returns the default debug directory (either workspace root or current dir)/.debug
+fn default_debug_dir() -> PathBuf {
+    #[cfg(feature = "use_workspace")]
+    {
+        find_workspace_root()
+            .map(|root| root.join(".debug"))
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "Warning: Could not find workspace root, falling back to current directory"
+                );
+                std::env::current_dir().unwrap_or_default().join(".debug")
+            })
+    }
+
+    #[cfg(not(feature = "use_workspace"))]
+    {
+        std::env::current_dir().unwrap_or_default().join(".debug")
+    }
+}
+
+#[cfg(feature = "output_to_target")]
+fn find_target_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
+        return Some(PathBuf::from(dir));
+    }
+
+    #[cfg(feature = "use_workspace")]
+    {
+        if let Some(ws_root) = find_workspace_root() {
+            return Some(ws_root.join("target"));
+        }
+    }
+
+    let current = std::env::current_dir().ok()?;
+    Some(current.join("target"))
+}
+
+#[cfg(feature = "use_workspace")]
+fn find_workspace_root() -> Option<PathBuf> {
+    let mut current_dir = env::current_dir().ok()?;
+    loop {
+        let cargo_toml_path = current_dir.join("Cargo.toml");
+        if cargo_toml_path.exists() {
+            if let Ok(content) = fs::read_to_string(&cargo_toml_path) {
+                if content.contains("[workspace]") {
+                    return Some(current_dir);
+                }
+            }
+        }
+        if !current_dir.pop() {
+            break;
+        }
+    }
+    None
 }
 
 const SEPARATOR_LINE: &str = "-----------------------------------------------------------";
@@ -61,10 +98,12 @@ pub fn write_to_debug_file(
     filename: &str,
     content: &str,
     header: Option<&str>,
+    context: Option<&str>,
 ) -> std::io::Result<()> {
+    let _ = fs::create_dir_all(&*DEBUG_DIR);
+
     let path = DEBUG_DIR.join(filename);
 
-    // minimize the lock duration by scoping it
     let should_clear = {
         let mut initialized = INITIALIZED_FILES.lock().unwrap();
         if !initialized.contains(filename) {
@@ -79,17 +118,470 @@ pub fn write_to_debug_file(
         let _ = fs::remove_file(&path);
     }
 
-    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    // buffered writer for better performance
+    let file = OpenOptions::new().create(true).append(true).open(&path)?;
+    let mut writer = std::io::BufWriter::new(file);
 
-    match header {
-        Some(header) => writeln!(
-            file,
-            "\n{0}\n\
-             > {1}\n\
-             {0}\n\
-             {2}",
-            SEPARATOR_LINE, header, content
-        ),
-        None => writeln!(file, "\n{}", content),
+    match (header, context) {
+        (Some(header), Some(context)) => {
+            writeln!(writer, "\n{0}", SEPARATOR_LINE)?;
+            writeln!(writer, "> {0} ({1})", header, context)?;
+            writeln!(writer, "{0}", SEPARATOR_LINE)?;
+            writeln!(writer, "{0}", content)?;
+        },
+        (Some(header), None) => {
+            writeln!(writer, "\n{0}", SEPARATOR_LINE)?;
+            writeln!(writer, "> {0}", header)?;
+            writeln!(writer, "{0}", SEPARATOR_LINE)?;
+            writeln!(writer, "{0}", content)?;
+        },
+        (None, Some(context)) => {
+            writeln!(writer, "\n{0}", SEPARATOR_LINE)?;
+            writeln!(writer, "> [at {0}]", context)?;
+            writeln!(writer, "{0}", SEPARATOR_LINE)?;
+            writeln!(writer, "{0}", content)?;
+        },
+        (None, None) => {
+            writeln!(writer, "\n{0}", content)?;
+        },
+    }
+
+    writer.flush()?;
+
+    Ok(())
+}
+
+#[macro_export]
+macro_rules! odebug {
+    ($($args:tt)*) => {
+        #[cfg(any(debug_assertions, feature = "always_log"))]
+        {
+            $crate::__internal_debug_macro!($($args)*)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! __internal_debug_macro {
+    // path-like syntax with file and header
+    ($file:ident::$header:ident($content:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            &format!("{}.log", stringify!($file)),
+            &$content.to_string(),
+            Some(stringify!($header)),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // path-like syntax with file and header, formatted content
+    ($file:ident::$header:ident($fmt:expr, $($arg:tt)+)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        let content = format!($fmt, $($arg)+);
+        $crate::write_to_debug_file(
+            &format!("{}.log", stringify!($file)),
+            &content,
+            Some(stringify!($header)),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // path-like syntax with just file
+    ($file:ident::($content:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            &format!("{}.log", stringify!($file)),
+            &$content.to_string(),
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // path-like syntax with just file, formatted content
+    ($file:ident::($fmt:expr, $($arg:tt)+)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        let content = format!($fmt, $($arg)+);
+        $crate::write_to_debug_file(
+            &format!("{}.log", stringify!($file)),
+            &content,
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // just header syntax
+    (::$header:ident($content:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            "debug.log",
+            &$content.to_string(),
+            Some(stringify!($header)),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // just header syntax with formatted content
+    (::$header:ident($fmt:expr, $($arg:tt)+)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        let content = format!($fmt, $($arg)+);
+        $crate::write_to_debug_file(
+            "debug.log",
+            &content,
+            Some(stringify!($header)),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // string literal filename support (keeping => syntax)
+    ($file:expr => $content:expr) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            $file,
+            &$content.to_string(),
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // string literal filename with formatted content
+    ($file:expr => $fmt:expr, $($arg:tt)+) => {{
+        let context = format!("{}:{}", file!(), line!());
+        let content = format!($fmt, $($arg)*);
+        $crate::write_to_debug_file(
+            $file,
+            &content,
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // method chaining for literals
+    ($content:literal.to_file($file:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            $file,
+            &$content.to_string(),
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    ($content:literal.with_header($header:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            "debug.log",
+            &$content.to_string(),
+            Some(&$header.to_string()),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // combined method chaining for literals
+    ($content:literal.to_file($file:expr).with_header($header:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            $file,
+            &$content.to_string(),
+            Some(&$header.to_string()),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // method chaining for identifiers
+    ($content:ident.to_file($file:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            $file,
+            &$content.to_string(),
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    ($content:ident.with_header($header:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            "debug.log",
+            &$content.to_string(),
+            Some(&$header.to_string()),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    ($content:ident.to_file($file:expr).with_header($header:expr)) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            $file,
+            &$content.to_string(),
+            Some(&$header.to_string()),
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // simple content (default file, no header)
+    ($content:expr) => {{
+        let context = format!("{}:{}", file!(), line!());
+        $crate::write_to_debug_file(
+            "debug.log",
+            &$content.to_string(),
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+
+    // format string (default file, no header)
+    ($fmt:expr, $($arg:tt)+) => {{
+        let context = format!("{}:{}", file!(), line!());
+        let content = format!($fmt, $($arg)+);
+        $crate::write_to_debug_file(
+            "debug.log",
+            &content,
+            None,
+            Some(&context)
+        ).unwrap_or_else(|e| eprintln!("Failed to write debug log: {}", e))
+    }};
+}
+
+#[cfg(test)]
+mod tests {
+    use once_cell::sync::Lazy;
+    use std::fs;
+    use std::path::Path;
+    use std::sync::Mutex;
+
+    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    fn cleanup_test_logs() {
+        let debug_dir = crate::DEBUG_DIR.as_path();
+        let files = ["debug.log", "custom.log", "test.log"];
+        for file in files {
+            let _ = fs::remove_file(debug_dir.join(file));
+        }
+    }
+
+    #[test]
+    fn test_default_variants() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        cleanup_test_logs();
+
+        // Test format string variant
+        odebug!("Test value: {}", 42);
+
+        // Test plain content variant
+        odebug!("Plain message");
+
+        // Test header and content variant (now using path syntax)
+        odebug!(::TestHeader("Test content"));
+
+        // Verify file was created
+        let path = crate::DEBUG_DIR.join("debug.log");
+        assert!(Path::new(&path).exists(), "debug.log should exist");
+
+        // Verify file content
+        let content = fs::read_to_string(path).unwrap();
+        let expected_values = ["Test value: 42", "Plain message", "TestHeader", "Test content"];
+
+        for expected in expected_values {
+            assert!(
+                content.contains(expected),
+                "Log should contain: '{}'",
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_custom_filename_variants() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        cleanup_test_logs();
+
+        // Test all custom filename variants with the new syntax
+        odebug!(custom::("Test value: {}", 42));
+        odebug!(custom::("Plain message"));
+        odebug!(custom::TestHeader("Test content"));
+        odebug!("custom.log" => "Alternative content");
+
+        // Verify file was created
+        let path = crate::DEBUG_DIR.join("custom.log");
+        assert!(Path::new(&path).exists(), "custom.log should exist");
+
+        // Verify file content
+        let content = fs::read_to_string(path).unwrap();
+        let expected_values = [
+            "Test value: 42",
+            "Plain message",
+            "TestHeader",
+            "Test content",
+            "Alternative content",
+        ];
+
+        for expected in expected_values {
+            assert!(
+                content.contains(expected),
+                "Log should contain: '{}'",
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_string_literal_filename_variants() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        cleanup_test_logs();
+
+        // Test string filename variants with => syntax
+        odebug!("test.log" => "Test value: {}", 42);
+        odebug!("test.log" => "Plain message");
+        odebug!("test.log" => "Test content");
+
+        // Verify file was created
+        let path = crate::DEBUG_DIR.join("test.log");
+        assert!(Path::new(&path).exists(), "test.log should exist");
+
+        // Verify file content
+        let content = fs::read_to_string(path).unwrap();
+        let expected_values = ["Test value: 42", "Plain message", "Test content"];
+
+        for expected in expected_values {
+            assert!(
+                content.contains(expected),
+                "Log should contain: '{}'",
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_literal_method_chaining() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        cleanup_test_logs();
+
+        // Test literal method chaining
+        odebug!("Message".to_file("chain.log"));
+        odebug!("Message".with_header("Test Header"));
+        odebug!("Message".to_file("chain.log").with_header("Combined"));
+
+        // Verify files were created
+        let debug_path = crate::DEBUG_DIR.join("debug.log");
+        let chain_path = crate::DEBUG_DIR.join("chain.log");
+
+        assert!(Path::new(&debug_path).exists(), "debug.log should exist");
+        assert!(Path::new(&chain_path).exists(), "chain.log should exist");
+
+        // Verify content
+        let debug_content = fs::read_to_string(debug_path).unwrap();
+        let chain_content = fs::read_to_string(chain_path).unwrap();
+
+        assert!(
+            debug_content.contains("Test Header"),
+            "debug.log should contain the header"
+        );
+        assert!(
+            chain_content.contains("Message"),
+            "chain.log should contain the message"
+        );
+        assert!(
+            chain_content.contains("Combined"),
+            "chain.log should contain the combined header"
+        );
+    }
+
+    #[test]
+    fn test_identifier_method_chaining() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        cleanup_test_logs();
+
+        // Create variables to test identifier chaining
+        let message = "Variable message".to_string();
+        let header = "Variable header".to_string();
+
+        // Test identifier method chaining
+        odebug!(message.to_file("var.log"));
+        odebug!(message.with_header(header));
+        odebug!(message.to_file("var.log").with_header("Combined"));
+
+        // Verify files were created
+        let debug_path = crate::DEBUG_DIR.join("debug.log");
+        let var_path = crate::DEBUG_DIR.join("var.log");
+
+        assert!(Path::new(&debug_path).exists(), "debug.log should exist");
+        assert!(Path::new(&var_path).exists(), "var.log should exist");
+
+        // Verify content
+        let debug_content = fs::read_to_string(debug_path).unwrap();
+        let var_content = fs::read_to_string(var_path).unwrap();
+
+        assert!(
+            debug_content.contains("Variable header"),
+            "debug.log should contain the variable header"
+        );
+        assert!(
+            var_content.contains("Variable message"),
+            "var.log should contain the variable message"
+        );
+        assert!(
+            var_content.contains("Combined"),
+            "var.log should contain the combined header"
+        );
+    }
+}
+
+#[cfg(test)]
+mod feature_tests {
+    use super::*;
+
+    fn get_debug_dir_path() -> PathBuf {
+        determine_debug_dir()
+    }
+
+    #[test]
+    fn test_debug_dir_location() {
+        let dir = get_debug_dir_path();
+
+        // Print the path for manual verification
+        println!("Debug directory would be: {}", dir.display());
+
+        // Basic verification based on known feature flags
+        #[cfg(feature = "output_to_target")]
+        {
+            assert!(
+                dir.to_string_lossy().contains("target/odebug")
+                    || dir.to_string_lossy().contains("target\\odebug"),
+                "With output_to_target enabled, path should contain 'target/odebug'"
+            );
+        }
+
+        #[cfg(all(not(feature = "output_to_target"), feature = "use_workspace"))]
+        {
+            // For workspace, we can only verify it ends with .debug
+            assert!(
+                dir.ends_with(".debug"),
+                "With use_workspace enabled, path should end with '.debug'"
+            );
+        }
+
+        #[cfg(all(not(feature = "output_to_target"), not(feature = "use_workspace")))]
+        {
+            // For default case, should be current_dir/.debug
+            let expected = std::env::current_dir().unwrap_or_default().join(".debug");
+            assert_eq!(dir, expected, "Default path should be current_dir/.debug");
+        }
+    }
+
+    // Test with environment variable
+    #[test]
+    #[cfg(feature = "output_to_target")]
+    fn test_target_dir_env_var() {
+        let test_dir = "/tmp/test_target_dir";
+        std::env::set_var("CARGO_TARGET_DIR", test_dir);
+
+        let dir = get_debug_dir_path();
+
+        assert!(
+            dir.starts_with(test_dir),
+            "Should use CARGO_TARGET_DIR when set"
+        );
+
+        std::env::remove_var("CARGO_TARGET_DIR");
     }
 }
