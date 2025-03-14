@@ -5,7 +5,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/orgrinrt/odebug.svg)](https://github.com/orgrinrt/odebug/stargazers)
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/odebug)](https://crates.io/crates/odebug)
 [![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/odebug.svg)](https://github.com/orgrinrt/odebug/issues)
-[![Current Version](https://img.shields.io/badge/version-0.0.1-red.svg)](https://github.com/orgrinrt/odebug)
+[![Current Version](https://img.shields.io/badge/version-0.1.0-red.svg)](https://github.com/orgrinrt/odebug)
 
 > Simple and flexible debug logging utility that allows simple and practical logging to a text file especially during proc-macro compilation.
 
