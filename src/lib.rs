@@ -1,3 +1,5 @@
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", "README.md"))]
+
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::env;
@@ -89,11 +91,37 @@ fn find_workspace_root() -> Option<PathBuf> {
     None
 }
 
+#[doc(hidden)]
 const SEPARATOR_LINE: &str = "-----------------------------------------------------------";
 
+#[doc(hidden)]
 static INITIALIZED_FILES: Lazy<std::sync::Mutex<HashSet<String>>> =
     Lazy::new(|| std::sync::Mutex::new(HashSet::new()));
 
+/// Writes content to a debug log file with optional header and context information.
+///
+/// # Parameters
+///
+/// * `filename` - Name of the log file
+/// * `content` - Content to write to the log file
+/// * `header` - Optional header to include before the content
+/// * `context` - Optional context information (typically file and line number)
+///
+/// # Returns
+///
+/// `std::io::Result<()>` indicating success or failure
+///
+/// # Examples
+///
+/// ```
+/// # use odebug::write_to_debug_file;
+/// write_to_debug_file(
+///     "debug.log",
+///     "Something happened",
+///     Some("INFO"),
+///     Some("main.rs:42")
+/// ).expect("Failed to write to log");
+/// ```
 pub fn write_to_debug_file(
     filename: &str,
     content: &str,
@@ -152,6 +180,41 @@ pub fn write_to_debug_file(
 }
 
 #[macro_export]
+/// Logs debug information to files with zero runtime overhead in release builds.
+///
+/// In its fundamentals, it just writes to files, but it provides a flexible syntax for specifying
+/// the file name, headers, and content. It also includes some rudimentary helpful meta data, such
+/// as the file name and line number where the macro was invoked.
+///
+/// This macro is only active in debug builds or when the `always_log` feature is enabled.
+/// In release builds with no `always_log` feature, it compiles to nothing.
+///
+/// # Examples
+///
+/// Basic logging to default file:
+/// ```
+/// use odebug::odebug;
+/// odebug!("Simple debug message");
+/// odebug!("Formatted message: {}", 42);
+/// ```
+///
+/// Custom file and headers:
+/// ```
+/// use odebug::odebug;
+/// // Log to custom file
+/// odebug!("custom.log" => "Message in custom file");
+///
+/// // Using path-like syntax with headers
+/// odebug!(custom::Header("Message with header"));
+/// ```
+///
+/// Method chaining syntax:
+/// ```
+/// use odebug::odebug;
+/// odebug!("Debug info".to_file("output.log"));
+/// odebug!("Important message".with_header("IMPORTANT"));
+/// odebug!("Error details".to_file("errors.log").with_header("ERROR"));
+/// ```
 macro_rules! odebug {
     ($($args:tt)*) => {
         #[cfg(any(debug_assertions, feature = "always_log"))]
@@ -161,6 +224,7 @@ macro_rules! odebug {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __internal_debug_macro {
     // path-like syntax with file and header
