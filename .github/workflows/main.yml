@@ -1,25 +1,23 @@
-name: crate cicd - push to main
+name: 'Crate: Merge Main'
 
 on:
   push:
     branches:
       - main
-    secrets:
-      CRATES_IO_TOKEN:
-        required: false
-      GH_RELEASE_TOKEN:
-        required: false
+  workflow_dispatch:
 
 jobs:
   call_crate_cicd:
-    uses: orgrinrt/cicd/.github/workflows/crate_ci.yml@v1.0.0
+    uses: orgrinrt/cicd/.github/workflows/crate_ci.yml@main
     secrets:
       CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
     with:
       profile: 'minimal'
       toolchain: 'stable'
-      components: ''
       override: true
-      deploy: false
-      tests_path: ''
+      deploy_cratesio: true
+      force_build: false
+      force_tests: false
+      force_deploy: false
+      auto_bump: true
