@@ -593,6 +593,9 @@ mod tests {
 #[cfg(test)]
 mod feature_tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     fn get_debug_dir_path() -> PathBuf {
         determine_debug_dir()
@@ -600,28 +603,19 @@ mod feature_tests {
 
     #[test]
     fn test_debug_dir_location() {
+        let _guard = ENV_TEST_MUTEX.lock().unwrap();
         let dir = get_debug_dir_path();
         println!("Debug directory would be: {}", dir.display());
 
         #[cfg(feature = "output_to_target")]
         {
-            // Check if CARGO_TARGET_DIR is set
-            if let Ok(target_dir) = std::env::var("CARGO_TARGET_DIR") {
-                // If set, our path should start with it and end with "odebug"
-                assert!(
-                    dir.to_string_lossy().starts_with(&target_dir),
-                    "Should use CARGO_TARGET_DIR when set"
-                );
-            } else {
-                // Otherwise check for the default pattern
-                assert!(
-                    dir.to_string_lossy().contains("target/odebug")
-                        || dir.to_string_lossy().contains("target\\odebug"),
-                    "Default path should contain 'target/odebug'"
-                );
-            }
+            // We specifically want to test the default behavior (without env vars)
+            assert!(
+                dir.to_string_lossy().contains("target/odebug")
+                    || dir.to_string_lossy().contains("target\\odebug"),
+                "Default path should contain 'target/odebug'"
+            );
 
-            // Always verify it ends with "odebug" regardless of the base path
             assert!(
                 dir.file_name().map_or(false, |name| name == "odebug"),
                 "Path should end with 'odebug' directory"
@@ -648,6 +642,7 @@ mod feature_tests {
     #[test]
     #[cfg(feature = "output_to_target")]
     fn test_target_dir_env_var() {
+        let _guard = ENV_TEST_MUTEX.lock().unwrap();
         let test_dir = "/tmp/test_target_dir";
         std::env::set_var("CARGO_TARGET_DIR", test_dir);
 
