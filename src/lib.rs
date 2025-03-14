@@ -537,23 +537,36 @@ mod feature_tests {
     #[test]
     fn test_debug_dir_location() {
         let dir = get_debug_dir_path();
-
-        // Print the path for manual verification
         println!("Debug directory would be: {}", dir.display());
 
-        // Basic verification based on known feature flags
         #[cfg(feature = "output_to_target")]
         {
+            // Check if CARGO_TARGET_DIR is set
+            if let Ok(target_dir) = std::env::var("CARGO_TARGET_DIR") {
+                // If set, our path should start with it and end with "odebug"
+                assert!(
+                    dir.to_string_lossy().starts_with(&target_dir),
+                    "Should use CARGO_TARGET_DIR when set"
+                );
+            } else {
+                // Otherwise check for the default pattern
+                assert!(
+                    dir.to_string_lossy().contains("target/odebug")
+                        || dir.to_string_lossy().contains("target\\odebug"),
+                    "Default path should contain 'target/odebug'"
+                );
+            }
+
+            // Always verify it ends with "odebug" regardless of the base path
             assert!(
-                dir.to_string_lossy().contains("target/odebug")
-                    || dir.to_string_lossy().contains("target\\odebug"),
-                "With output_to_target enabled, path should contain 'target/odebug'"
+                dir.file_name().map_or(false, |name| name == "odebug"),
+                "Path should end with 'odebug' directory"
             );
         }
 
+        // Keep the rest of your existing test cases for other features
         #[cfg(all(not(feature = "output_to_target"), feature = "use_workspace"))]
         {
-            // For workspace, we can only verify it ends with .debug
             assert!(
                 dir.ends_with(".debug"),
                 "With use_workspace enabled, path should end with '.debug'"
@@ -562,7 +575,6 @@ mod feature_tests {
 
         #[cfg(all(not(feature = "output_to_target"), not(feature = "use_workspace")))]
         {
-            // For default case, should be current_dir/.debug
             let expected = std::env::current_dir().unwrap_or_default().join(".debug");
             assert_eq!(dir, expected, "Default path should be current_dir/.debug");
         }
