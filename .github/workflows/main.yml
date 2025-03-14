@@ -21,3 +21,4 @@ jobs:
       force_tests: false
       force_deploy: false
       auto_bump: true
+      test_feature_sets: "test_suite_a, test_suite_b, test_suite_c"

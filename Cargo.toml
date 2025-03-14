@@ -4,21 +4,25 @@ authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.0.1"
 edition = "2021"
 description = """
-Debug helper especially for proc-macros, that allows simple and practical logging to a text file the compilation process.
+Simple and flexible debug logging utility that allows simple and practical logging to a text file especially during proc-macro compilation.
 """
-license = "MIT"
 license-file = "LICENSE"
 readme = "README.md"
-keywords = ["debug", "print", "log", "proc-macro", "helper"]
-categories = ["development-tools", "development-tools::procedural-macro-helpers", "development-tools::debugging"]
+keywords = ["debug", "logging", "proc-macro", "development", "file-logger"]
+categories = ["development-tools", "development-tools::procedural-macro-helpers", "development-tools::debugging", "development-tools::testing"]
 documentation = "https://docs.rs/odebug"
 homepage = "https://github.com/orgrinrt/odebug"
 repository = "https://github.com/orgrinrt/odebug"
 
 [dependencies]
-paste = "1.0.15"
-once_cell = "1.17.1"
+once_cell = "1.21.1"
+
 
 [features]
-default = ["use_workspace"]
+default = ["use_workspace", "output_to_target"]
 use_workspace = []
+output_to_target = []
+always_log = []
+test_suite_a = []
+test_suite_b = ["use_workspace"]
+test_suite_c = ["output_to_target"]
