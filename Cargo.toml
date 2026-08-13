@@ -4,7 +4,7 @@ authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.1.0"
 edition = "2021"
 description = """
-Simple and flexible debug logging utility that allows simple and practical logging to a text file especially during proc-macro compilation.
+Debug logging utility that writes to text files, practical especially during proc-macro compilation.
 """
 license-file = "LICENSE"
 readme = "README.md"

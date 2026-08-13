@@ -7,15 +7,15 @@
 [![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/odebug.svg)](https://github.com/orgrinrt/odebug/issues)
 [![Current Version](https://img.shields.io/badge/version-0.1.0-red.svg)](https://github.com/orgrinrt/odebug)
 
-> Simple and flexible debug logging utility that allows simple and practical logging to a text file especially during proc-macro compilation.
+> Debug logging utility that writes to text files, practical especially during proc-macro compilation.
 
 </div>
 
 ## Features
 
-- Simple macro-based API for logging information to files
+- Macro-based API for logging information to files
 - Configurable output location (project root, workspace root, or target directory)
-- Works great for debugging proc-macros
+- Works during proc-macro compilation, where print output is hard to capture
 - No dependencies besides `once_cell`
 - No runtime overhead when not building for debug (unless `always_log` feature is enabled)
 
@@ -24,28 +24,32 @@
 ```rust
 use odebug::odebug;
 
-// basic logging to default debug.log file
+let some_value = 42;
+
+// basic logging to the default debug.log file
 odebug!("Simple message");
 odebug!("Formatted message: value = {}", some_value);
 
-// logging to a custom file (legacy syntax)
+// logging to a custom file (string literal syntax)
 odebug!("test.log" => "This goes to test.log");
+odebug!("test.log" => "Formatted: {}", some_value);
 
-// path-based syntax has hierarchical formatting
-// below, the file name is derived from the path (first node) = "custom.log"
-odebug!(custom::nested::headers("A message with two headers, one for each level"));
-// or alternatively, a string literal can be used to explicitly specify the file name
-odebug!("explicit.log"::specific::outfile("Message with explicit file name and fmt {}", foo));
+// path-based syntax: the first ident names the file ("custom.log" below),
+// the second becomes a header above the entry
+odebug!(custom::Header("A message with a header"));
+odebug!(custom::Header("Formatted message: {}", some_value));
+// file only (no header), or header only (default debug.log file)
+odebug!(custom::("No header"));
+odebug!(::Header("Header in debug.log"));
 
 // alternative to above, method chaining syntax, works for string literals and idents
-// can be used with any type that implements `ToString`
 odebug!("My message".to_file("custom.log"));
 odebug!("My message".with_header("IMPORTANT"));
 odebug!("My message".to_file("custom.log").with_header("DEBUG"));
 
 // also works with variables, but they are not evaluated as expressions,
 // rather only as idents to use internally (some caveats for usage)
-let msg = format!("Dynamic content: {}", value);
+let msg = format!("Dynamic content: {}", some_value);
 odebug!(msg.to_file("dynamic.log").with_header("VARIABLE"));
 ```
 
@@ -53,8 +57,8 @@ odebug!(msg.to_file("dynamic.log").with_header("VARIABLE"));
 
 The crate can be configured with feature flags:
 
-- `use_workspace` (default): Places log files in workspace root's `.debug` directory if in a workspace
-- `output_to_target` (default): Places log files in `target/odebug` directory instead of the legacy `root/.debug` directory
+- `use_workspace` (default): Resolves paths from the workspace root instead of the current directory (the workspace `target` directory, or the workspace root's `.debug` directory when `output_to_target` is disabled)
+- `output_to_target` (default): Places log files in the `target/odebug` directory (honours `CARGO_TARGET_DIR`) instead of the legacy `.debug` directory
 - `always_log`: Always logs to the file, even if debug_assertions are disabled
 
 ## The Problem
@@ -72,6 +76,6 @@ Whether you use this project, have learned something from it, or just like it, p
 
 ## License
 
-> You can check out the full license [here](https://github.com/orgrinrt/odebug/blob/master/LICENSE)
+> You can check out the full license [here](https://github.com/orgrinrt/odebug/blob/main/LICENSE)
 
 This project is licensed under the terms of the **MIT** license.
