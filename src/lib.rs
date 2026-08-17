@@ -617,7 +617,7 @@ mod feature_tests {
             );
 
             assert!(
-                dir.file_name().map_or(false, |name| name == "odebug"),
+                dir.file_name().is_some_and(|name| name == "odebug"),
                 "Path should end with 'odebug' directory"
             );
         }
