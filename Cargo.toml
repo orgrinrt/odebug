@@ -6,7 +6,7 @@ edition = "2021"
 description = """
 Debug logging utility that writes to text files, practical especially during proc-macro compilation.
 """
-license-file = "LICENSE"
+license = "MPL-2.0"
 readme = "README.md"
 keywords = ["debug", "logging", "proc-macro", "development", "file-logger"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "development-tools::debugging", "development-tools::testing"]
