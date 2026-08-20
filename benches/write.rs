@@ -84,6 +84,12 @@ fn cached_buffered(path: &PathBuf, line: &str) {
     writeln!(w, "{line}").expect("a write");
 }
 
+/// The crate's own function.
+///
+/// It writes into the resolved debug directory rather than into the temporary one the
+/// other arms use, so on a machine where those are different filesystems the comparison
+/// carries that difference too. Naming it is better than implying the arms are equal in a
+/// respect they are not.
 fn shipped(_path: &PathBuf, line: &str) {
     odebug::write_to_debug_file("bench_shipped.log", line, None, None).expect("a write");
 }

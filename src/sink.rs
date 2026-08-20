@@ -111,14 +111,18 @@ pub(crate) fn declares_a_workspace(manifest: &str) -> bool {
 
 /// The open log files, keyed by name.
 ///
-/// Opening the file per line cost about 23 microseconds against 3.5 for writing into one
-/// already open, measured in `benches/write.rs`. A build that logs a few thousand lines
-/// spends the difference in the compiler, where it is felt.
+/// Opening the file per line cost about 23 microseconds against 5.0 for this function
+/// with the file already open, measured in `benches/write.rs`. A build that logs a few
+/// thousand lines spends the difference in the compiler, where it is felt.
 ///
-/// Unbuffered on purpose. A buffer takes it to about 190 nanoseconds and loses whatever
-/// has not been flushed when the process dies, which for a debug log is the moment the
-/// contents matter most. The `buffered` feature is there for logging in bulk from
-/// something that will exit tidily.
+/// Those are the figures for `write_to_debug_file` itself. An arm in the same bench that
+/// only keeps a handle and writes reads 3.5, and quoting that here would be quoting
+/// something no caller can obtain: the lock and the map lookup are part of the cost.
+///
+/// Unbuffered on purpose. A buffer takes the shipped path to about 0.2 microseconds and
+/// loses whatever has not been flushed when the process dies, which for a debug log is the
+/// moment the contents matter most. The `buffered` feature is there for logging in bulk
+/// from something that will exit tidily.
 static FILES: Mutex<Option<HashMap<String, Sink>>> = Mutex::new(None);
 
 #[cfg(not(feature = "buffered"))]
