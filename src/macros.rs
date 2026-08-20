@@ -74,10 +74,30 @@ macro_rules! __odebug_emit {
 /// odebug!("Important message".with_header("IMPORTANT"));
 /// odebug!("Error details".to_file("errors.log").with_header("ERROR"));
 /// ```
+// Two definitions, selected by *this* crate's feature rather than the caller's.
+//
+// The single definition tested `feature = "always_log"` inside the expansion, and an
+// expansion is compiled in the calling crate, so the condition asked whether the *caller*
+// had declared a feature by that name. Callers do not: `always_log` belongs to odebug. So
+// the feature did nothing for anybody, and rustc reported
+// `unexpected cfg condition value: always_log` once per call site. One consumer crate
+// carried twenty-eight of those.
+//
+// `debug_assertions` stays inside the expansion on purpose. That one is meant to be the
+// caller's, so a debug build of a crate that depends on a release-built odebug still logs.
+#[cfg(feature = "always_log")]
 #[macro_export]
 macro_rules! odebug {
     ($($args:tt)*) => {
-        #[cfg(any(debug_assertions, feature = "always_log"))]
+        $crate::__odebug_dispatch!($($args)*)
+    };
+}
+
+#[cfg(not(feature = "always_log"))]
+#[macro_export]
+macro_rules! odebug {
+    ($($args:tt)*) => {
+        #[cfg(debug_assertions)]
         {
             $crate::__odebug_dispatch!($($args)*)
         }

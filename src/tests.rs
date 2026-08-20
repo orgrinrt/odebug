@@ -250,3 +250,31 @@ mod directory_choice {
         assert!(dir.is_dir(), "the directory is made, not just named");
     }
 }
+
+/// The macro's own feature belongs to this crate, not to the caller's.
+///
+/// `odebug!` used to expand to `#[cfg(any(debug_assertions, feature = "always_log"))]`, and
+/// an expansion is compiled in the calling crate, so that condition asked whether the
+/// *caller* had a feature called `always_log`. Callers do not; it is odebug's. The feature
+/// therefore did nothing for anybody, and rustc reported
+/// `unexpected cfg condition value: always_log` once per call site: twenty-eight of them in
+/// one consumer.
+///
+/// There is no way to observe a `cfg` from another crate at runtime, so what this asserts
+/// is the half that is observable: with the feature on, logging happens whatever the
+/// caller's build profile is.
+#[test]
+#[cfg(feature = "always_log")]
+fn always_log_writes_regardless_of_the_build_profile() {
+    let _g = serial();
+    odebug!("always.log" => "written under always_log");
+    assert!(read("always.log").contains("written under always_log"));
+}
+
+#[test]
+#[cfg(all(not(feature = "always_log"), debug_assertions))]
+fn without_always_log_a_debug_build_still_writes() {
+    let _g = serial();
+    odebug!("debugonly.log" => "written in a debug build");
+    assert!(read("debugonly.log").contains("written in a debug build"));
+}
