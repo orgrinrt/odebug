@@ -1,12 +1,12 @@
 [package]
 name = "odebug"
 authors = ["orgrinrt", "Hiisi Digital"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = """
-Simple and flexible debug logging utility that allows simple and practical logging to a text file especially during proc-macro compilation.
+Debug logging utility that writes to text files, practical especially during proc-macro compilation.
 """
-license-file = "LICENSE"
+license = "MPL-2.0"
 readme = "README.md"
 keywords = ["debug", "logging", "proc-macro", "development", "file-logger"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "development-tools::debugging", "development-tools::testing"]
