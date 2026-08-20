@@ -1,7 +1,7 @@
 [package]
 name = "odebug"
 authors = ["orgrinrt", "Hiisi Digital"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = """
 Debug logging utility that writes to text files, practical especially during proc-macro compilation.
