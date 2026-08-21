@@ -64,6 +64,51 @@ odebug!(msg.to_file("dynamic.log").with_header("VARIABLE"));
 - `always_log`: logs in release builds too
 - `buffered`: keeps each file open behind a buffer. See below; it is not the default and
   the reason is worth reading before turning it on.
+- `no_std`: compiles the file writer out, along with the three flags that only say where it
+  puts its files. What is left is the macro and the destination contract. Nothing is installed
+  by default, because there is nothing sensible to default to, and an entry written before a
+  sink is installed is reported as a refusal and dropped.
+- `no_alloc`: implies `no_std`. The macro builds no `String` under any selection, so this adds
+  nothing and takes nothing away. It states that the path from a call to a sink allocates
+  nowhere.
+
+## Somewhere other than a file
+
+Files are what a procedural macro needs, since it runs inside the compiler where `println!`
+goes somewhere nobody is reading. That is a good default and a poor requirement: a crate
+without `std` has no files, one on a microcontroller has a serial port or a ring buffer, and a
+test wants the entries in memory where it can assert on them.
+
+So the destination is a contract, and it is `notko::sink::Emit` rather than one invented here.
+Receiving an item is a stack-wide shape; a crate that writes its own is a crate nobody else's
+code composes with. It is re-exported, so implementing a sink names this crate and not notko.
+
+```rust
+use odebug::{Emit, Entry, Error, Outcome, Sink};
+
+struct Discard;
+
+impl Emit<Entry<'_>> for Discard {
+    type Err = Error;
+
+    fn emit(&self, _entry: Entry<'_>) -> Outcome<(), Self::Err> {
+        Outcome::Ok(())
+    }
+}
+
+impl Sink for Discard {}
+```
+
+`&self` because the sink is installed once and reached from anywhere, so nobody holds it
+exclusively. Fallible because a write fails for reasons the caller neither caused nor can act
+on. An entry's `content` and `origin` are `core::fmt::Arguments`, which is what `format_args!`
+produces and costs nothing to build, so a sink formats straight into wherever it writes and no
+`String` exists on the way.
+
+`install_sink!(Discard)` puts it in place, and
+[`examples/your_own_sink.rs`](examples/your_own_sink.rs) is a working one that keeps entries in
+memory. [`examples/every_call_form.rs`](examples/every_call_form.rs) names every shape the
+macro accepts.
 
 ## What a line costs
 

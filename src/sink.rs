@@ -249,28 +249,34 @@ pub(crate) fn reset() {
 #[derive(Debug, Clone, Copy)]
 pub struct FileSink;
 
-impl crate::Sink for FileSink {
-    fn write_entry(
-        &self,
-        target: &str,
-        content: core::fmt::Arguments<'_>,
-        header: Option<&str>,
-        origin: core::fmt::Arguments<'_>,
-    ) -> Result<(), crate::Error> {
+impl notko::sink::Emit<crate::Entry<'_>> for FileSink {
+    type Err = crate::Error;
+
+    fn emit(&self, entry: crate::Entry<'_>) -> notko::Outcome<(), Self::Err> {
         // Formatted here rather than at the call site, because that is the difference this
         // sink's having an allocator buys: the entry arrives as `Arguments` and this is
         // where somewhere-to-put-it exists.
-        let content = content.to_string();
-        let origin = origin.to_string();
+        let content = entry.content.to_string();
+        let origin = entry.origin.to_string();
 
-        write_to_debug_file(target, &content, header, Some(&origin)).map_err(|e| {
-            eprintln!("odebug: could not write the log: {e}");
-            crate::Error
-        })
+        match write_to_debug_file(entry.target, &content, entry.header, Some(&origin)) {
+            Ok(()) => notko::Outcome::Ok(()),
+            Err(e) => {
+                eprintln!("odebug: could not write the log: {e}");
+                notko::Outcome::Err(crate::Error)
+            },
+        }
     }
+}
 
+impl crate::Sink for FileSink {
     fn flush(&self) {
-        flush();
+        // Reported rather than discarded. Every other failure in this crate reaches stderr,
+        // and a flush that silently fails is the one that loses entries: `buffered` holds
+        // them until this runs, so a refusal here is data gone rather than data delayed.
+        if let Err(e) = flush() {
+            eprintln!("odebug: could not flush the log: {e}");
+        }
     }
 }
 

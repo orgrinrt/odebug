@@ -84,22 +84,21 @@ fn every_selection_builds() {
 
 /// A sink a `#![no_std]` consumer can actually write.
 const CONSUMER_SINK: &str = r#"
-use core::fmt;
-use odebug::{odebug, Error, Sink};
+// One crate, not two. The contract is `notko::sink::Emit`, and this crate re-exports it so a
+// consumer writing a sink does not acquire a dependency on notko to spell it.
+use odebug::{odebug, Emit, Entry, Error, Outcome, Sink};
 
 pub struct Discard;
 
-impl Sink for Discard {
-    fn write_entry(
-        &self,
-        _target: &str,
-        _content: fmt::Arguments<'_>,
-        _header: Option<&str>,
-        _origin: fmt::Arguments<'_>,
-    ) -> Result<(), Error> {
-        Ok(())
+impl Emit<Entry<'_>> for Discard {
+    type Err = Error;
+
+    fn emit(&self, _entry: Entry<'_>) -> Outcome<(), Self::Err> {
+        Outcome::Ok(())
     }
 }
+
+impl Sink for Discard {}
 
 pub fn install() {
     static HOLDER: &dyn Sink = &Discard;
