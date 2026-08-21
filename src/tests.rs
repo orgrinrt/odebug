@@ -40,7 +40,10 @@ fn format_arguments_are_applied() {
     odebug!("a value: {}", 42);
     odebug!("two values: {} and {}", 1, 2);
     let log = read("debug.log");
-    assert!(log.contains("a value: 42"), "the argument reaches the file, not the format string");
+    assert!(
+        log.contains("a value: 42"),
+        "the argument reaches the file, not the format string"
+    );
     assert!(log.contains("two values: 1 and 2"));
 }
 
@@ -133,9 +136,21 @@ fn a_header_is_set_off_by_a_rule() {
     odebug!(::Shape("body"));
     let log = read("debug.log");
     let lines: Vec<&str> = log.lines().filter(|l| !l.is_empty()).collect();
-    assert!(lines[0].starts_with("---"), "a rule opens the entry, got {:?}", lines[0]);
-    assert!(lines[1].starts_with("> Shape ("), "then the header and context, got {:?}", lines[1]);
-    assert!(lines[2].starts_with("---"), "then a rule, got {:?}", lines[2]);
+    assert!(
+        lines[0].starts_with("---"),
+        "a rule opens the entry, got {:?}",
+        lines[0]
+    );
+    assert!(
+        lines[1].starts_with("> Shape ("),
+        "then the header and context, got {:?}",
+        lines[1]
+    );
+    assert!(
+        lines[2].starts_with("---"),
+        "then a rule, got {:?}",
+        lines[2]
+    );
     assert_eq!(lines[3], "body", "then the content");
 }
 
@@ -164,7 +179,10 @@ fn later_writes_in_one_run_append() {
     odebug!("append.log" => "first");
     odebug!("append.log" => "second");
     let log = read("append.log");
-    assert!(log.contains("first") && log.contains("second"), "both survive:\n{log}");
+    assert!(
+        log.contains("first") && log.contains("second"),
+        "both survive:\n{log}"
+    );
 }
 
 #[test]
@@ -181,7 +199,10 @@ fn writing_from_several_threads_keeps_every_line() {
     });
     let log = read("threads.log");
     for n in 0..LINES {
-        assert!(log.contains(&format!("line {n}")), "line {n} went missing under threads");
+        assert!(
+            log.contains(&format!("line {n}")),
+            "line {n} went missing under threads"
+        );
     }
 }
 
@@ -191,7 +212,10 @@ fn the_public_api_reports_a_failure_rather_than_panicking() {
     // A name with a path separator in it does not resolve to a file inside the debug
     // directory, so this is the failure path a caller can actually reach.
     let result = write_to_debug_file("no/such/directory/x.log", "content", None, None);
-    assert!(result.is_err(), "an unwritable name is an error, not a panic");
+    assert!(
+        result.is_err(),
+        "an unwritable name is an error, not a panic"
+    );
 }
 
 #[cfg(feature = "use_workspace")]
@@ -201,8 +225,13 @@ mod workspace_detection {
     #[test]
     fn a_root_manifest_is_recognised() {
         assert!(declares_a_workspace("[workspace]\nmembers = []\n"));
-        assert!(declares_a_workspace("[package]\nname = \"x\"\n\n[workspace]\n"));
-        assert!(declares_a_workspace("  [workspace]  \n"), "leading space is still the table");
+        assert!(declares_a_workspace(
+            "[package]\nname = \"x\"\n\n[workspace]\n"
+        ));
+        assert!(
+            declares_a_workspace("  [workspace]  \n"),
+            "leading space is still the table"
+        );
     }
 
     #[test]
@@ -213,26 +242,61 @@ mod workspace_detection {
         assert!(!declares_a_workspace(
             "[package]\nname = \"member\"\n\n[dependencies]\nserde.workspace = true\n"
         ));
-        assert!(!declares_a_workspace("[workspace.dependencies]\nserde = \"1\"\n"));
-        assert!(!declares_a_workspace("[workspace.package]\nversion = \"1.0\"\n"));
+        assert!(!declares_a_workspace(
+            "[workspace.dependencies]\nserde = \"1\"\n"
+        ));
+        assert!(!declares_a_workspace(
+            "[workspace.package]\nversion = \"1.0\"\n"
+        ));
         assert!(!declares_a_workspace("# [workspace] is commented out\n"));
-        assert!(!declares_a_workspace("description = \"see [workspace] for more\"\n"));
+        assert!(!declares_a_workspace(
+            "description = \"see [workspace] for more\"\n"
+        ));
     }
 }
 
 mod directory_choice {
     use crate::debug_dir;
+    #[cfg(feature = "output_to_target")]
+    use std::path::PathBuf;
+
+    /// Where cargo is actually putting build output, which is not always a directory called
+    /// `target`. `CARGO_TARGET_DIR` moves it and CI routinely sets it.
+    #[cfg(feature = "output_to_target")]
+    fn target_dir() -> PathBuf {
+        if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
+            return PathBuf::from(dir);
+        }
+        // Without the variable it sits beside the manifest, which is where the crate's own
+        // resolution looks for it too.
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target")
+    }
 
     #[test]
     fn the_directory_matches_the_features_that_chose_it() {
         let dir = debug_dir();
-        let shown = dir.to_string_lossy();
+        // Read even where no arm below formats it, so the binding is not unused under a
+        // selection that happens to take the branch that does not mention it.
+        let shown = dir.to_string_lossy().into_owned();
+        let _ = &shown;
 
         #[cfg(feature = "output_to_target")]
-        assert!(
-            shown.contains("target/odebug") || shown.contains("target\\odebug"),
-            "with output_to_target the log belongs under the target directory, got {shown}"
-        );
+        {
+            // Against the resolved target directory rather than against the literal "target".
+            // CARGO_TARGET_DIR renames it, which is routine in CI, and an assertion on the
+            // name is then an assertion about the environment: it fails on correct behaviour
+            // and says nothing when it passes.
+            let target = target_dir();
+            assert!(
+                dir.starts_with(&target),
+                "with output_to_target the log belongs under {}, got {shown}",
+                target.display()
+            );
+            assert!(
+                dir.ends_with("odebug"),
+                "with output_to_target the log belongs in an odebug subdirectory, got {shown}"
+            );
+        }
 
         #[cfg(all(not(feature = "output_to_target"), feature = "use_workspace"))]
         assert!(

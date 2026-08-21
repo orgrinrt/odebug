@@ -8,8 +8,20 @@
 //! example prints where that is and then lists what it wrote, so the output is checkable
 //! rather than a claim.
 
+#[cfg(not(feature = "no_std"))]
 use odebug::odebug;
 
+// The file sink is what this example is about, and it does not exist under `no_std`, where
+// there is no filesystem to write to. cargo builds every example under every feature
+// selection, and `required-features` names features an example needs rather than one it
+// cannot have, so the gate is on `main`. An inner attribute would remove `main` altogether,
+// and cargo refuses an example without one.
+#[cfg(feature = "no_std")]
+fn main() {
+    println!("this example needs the file sink, which `no_std` removes");
+}
+
+#[cfg(not(feature = "no_std"))]
 fn main() {
     let value = 41;
     let message = String::from("held in a variable");

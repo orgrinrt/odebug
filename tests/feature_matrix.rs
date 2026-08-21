@@ -15,12 +15,18 @@ fn check(features: &str) -> (bool, String) {
     command
         .args(["check", "--quiet", "--no-default-features"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/target/feature-matrix"));
+        .env(
+            "CARGO_TARGET_DIR",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/target/feature-matrix"),
+        );
     if !features.is_empty() {
         command.args(["--features", features]);
     }
     let output = command.output().expect("cargo runs");
-    (output.status.success(), String::from_utf8_lossy(&output.stderr).to_string())
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
 }
 
 /// Builds a throwaway crate whose body is `body`, against this crate at `features`.
@@ -31,7 +37,11 @@ fn consumer_compiles(name: &str, features: &str, attrs: &str, body: &str) -> (bo
     let features_list = if features.is_empty() {
         String::new()
     } else {
-        features.split(',').map(|f| format!("\"{f}\"")).collect::<Vec<_>>().join(", ")
+        features
+            .split(',')
+            .map(|f| format!("\"{f}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
     };
 
     fs::write(
@@ -45,17 +55,26 @@ fn consumer_compiles(name: &str, features: &str, attrs: &str, body: &str) -> (bo
     )
     .expect("the consumer manifest");
 
-    fs::write(root.join("src").join("lib.rs"), format!("{attrs}\n{body}\n"))
-        .expect("the consumer source");
+    fs::write(
+        root.join("src").join("lib.rs"),
+        format!("{attrs}\n{body}\n"),
+    )
+    .expect("the consumer source");
 
     let output = Command::new(env!("CARGO"))
         .args(["check", "--quiet"])
         .current_dir(&root)
-        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/target/consumers/target"))
+        .env(
+            "CARGO_TARGET_DIR",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/target/consumers/target"),
+        )
         .output()
         .expect("cargo runs");
 
-    (output.status.success(), String::from_utf8_lossy(&output.stderr).to_string())
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
 }
 
 #[test]
@@ -118,7 +137,10 @@ fn a_no_std_consumer_can_install_a_sink_and_log_to_it() {
     // expands in the consumer's crate, so whether what it expands to needs `std` is a
     // question about that crate rather than this one.
     let (ok, err) = consumer_compiles("no_std_consumer", "no_alloc", "#![no_std]", CONSUMER_SINK);
-    assert!(ok, "a `#![no_std]` consumer can log through its own sink:\n{err}");
+    assert!(
+        ok,
+        "a `#![no_std]` consumer can log through its own sink:\n{err}"
+    );
 }
 
 #[test]
@@ -132,7 +154,10 @@ fn that_consumer_really_is_without_std() {
         "pub fn reaches() { let _ = std::vec::Vec::<u8>::new(); }",
     );
     assert!(!ok, "a `#![no_std]` consumer must not reach `std::vec`");
-    assert!(err.contains("std"), "the error is about `std` being absent:\n{err}");
+    assert!(
+        err.contains("std"),
+        "the error is about `std` being absent:\n{err}"
+    );
 }
 
 #[test]
@@ -175,7 +200,10 @@ fn the_sink_suite_actually_runs() {
     let output = Command::new(env!("CARGO"))
         .args(["test", "--test", "no_std_sink"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/target/feature-matrix"))
+        .env(
+            "CARGO_TARGET_DIR",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/target/feature-matrix"),
+        )
         .output()
         .expect("cargo runs");
 
@@ -189,5 +217,8 @@ fn the_sink_suite_actually_runs() {
         .and_then(|count| count.parse().ok())
         .expect("the suite reported a result line");
 
-    assert!(ran >= 4, "the sink suite ran {ran} cases, where it has at least 4");
+    assert!(
+        ran >= 4,
+        "the sink suite ran {ran} cases, where it has at least 4"
+    );
 }

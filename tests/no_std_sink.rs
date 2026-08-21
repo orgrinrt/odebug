@@ -29,7 +29,7 @@ struct Buffer {
     /// says so rather than pretending the cell is enough.
     bytes: UnsafeCell<[u8; CAPACITY]>,
     /// How much has been written.
-    used:  AtomicUsize,
+    used: AtomicUsize,
 }
 
 // SAFETY: this test drives the sink from one thread. `Sink` requires `Sync` because a sink
@@ -38,7 +38,10 @@ unsafe impl Sync for Buffer {}
 
 impl Buffer {
     const fn new() -> Self {
-        Self { bytes: UnsafeCell::new([0; CAPACITY]), used: AtomicUsize::new(0) }
+        Self {
+            bytes: UnsafeCell::new([0; CAPACITY]),
+            used: AtomicUsize::new(0),
+        }
     }
 
     /// What has been written so far.
@@ -46,7 +49,7 @@ impl Buffer {
         let used = self.used.load(Ordering::Acquire);
         // SAFETY: single-threaded, as above, and `used` never exceeds `CAPACITY`.
         let bytes = unsafe { &*self.bytes.get() };
-        String::from_utf8_lossy(&bytes[.. used]).into_owned()
+        String::from_utf8_lossy(&bytes[..used]).into_owned()
     }
 
     fn clear(&self) {
@@ -64,7 +67,7 @@ impl Write for Cursor<'_> {
         if end > used {
             // SAFETY: single-threaded, and `end` is clamped to the capacity.
             let bytes = unsafe { &mut *self.0.bytes.get() };
-            bytes[used .. end].copy_from_slice(&s.as_bytes()[.. end - used]);
+            bytes[used..end].copy_from_slice(&s.as_bytes()[..end - used]);
             self.0.used.store(end, Ordering::Release);
         }
         Ok(())
@@ -115,7 +118,9 @@ static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// Returns the guard that keeps the other tests out, which the caller holds for the length
 /// of its own body.
 fn install() -> std::sync::MutexGuard<'static, ()> {
-    let guard = ONE_AT_A_TIME.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let guard = ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     static HOLDER: &dyn Sink = &BUFFER;
     odebug::install_sink_ref(&HOLDER);
     BUFFER.clear();
@@ -129,9 +134,18 @@ fn an_entry_reaches_a_sink_the_consumer_wrote() {
     odebug!("a plain message");
 
     let written = BUFFER.contents();
-    assert!(written.contains("a plain message"), "the entry did not arrive:\n{written}");
-    assert!(written.contains("[debug.log]"), "the target did not arrive:\n{written}");
-    assert!(written.contains("no_std_sink.rs"), "the origin did not arrive:\n{written}");
+    assert!(
+        written.contains("a plain message"),
+        "the entry did not arrive:\n{written}"
+    );
+    assert!(
+        written.contains("[debug.log]"),
+        "the target did not arrive:\n{written}"
+    );
+    assert!(
+        written.contains("no_std_sink.rs"),
+        "the origin did not arrive:\n{written}"
+    );
 }
 
 #[test]
@@ -155,7 +169,10 @@ fn every_form_reaches_it_too() {
         "[out.log]",
         "to a named target",
     ] {
-        assert!(written.contains(expected), "missing {expected:?} in:\n{written}");
+        assert!(
+            written.contains(expected),
+            "missing {expected:?} in:\n{written}"
+        );
     }
 }
 
@@ -168,12 +185,21 @@ fn installing_a_sink_replaces_whatever_was_there() {
     // `odebug!` would silently take the destination back.
     odebug!("first");
     let after_first = BUFFER.contents();
-    assert!(after_first.contains("first"), "the consumer's sink was displaced:\n{after_first}");
+    assert!(
+        after_first.contains("first"),
+        "the consumer's sink was displaced:\n{after_first}"
+    );
 
     odebug!("second");
     let after_second = BUFFER.contents();
-    assert!(after_second.contains("first"), "the buffer was reset:\n{after_second}");
-    assert!(after_second.contains("second"), "the second entry did not arrive:\n{after_second}");
+    assert!(
+        after_second.contains("first"),
+        "the buffer was reset:\n{after_second}"
+    );
+    assert!(
+        after_second.contains("second"),
+        "the second entry did not arrive:\n{after_second}"
+    );
 }
 
 #[test]
