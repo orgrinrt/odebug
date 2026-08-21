@@ -237,3 +237,51 @@ pub(crate) fn reset() {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     *guard = None;
 }
+
+/// The file writer, as a [`Sink`].
+///
+/// This crate's own destination and the one a procedural macro wants: it runs inside the
+/// compiler, where `println!` goes somewhere nobody is reading. Installed automatically on
+/// the first entry, so nothing has to be set up to use `odebug!`, and replaceable by
+/// installing another sink.
+///
+/// [`Sink`]: crate::Sink
+#[derive(Debug, Clone, Copy)]
+pub struct FileSink;
+
+impl crate::Sink for FileSink {
+    fn write_entry(
+        &self,
+        target: &str,
+        content: core::fmt::Arguments<'_>,
+        header: Option<&str>,
+        origin: core::fmt::Arguments<'_>,
+    ) -> Result<(), crate::Error> {
+        // Formatted here rather than at the call site, because that is the difference this
+        // sink's having an allocator buys: the entry arrives as `Arguments` and this is
+        // where somewhere-to-put-it exists.
+        let content = content.to_string();
+        let origin = origin.to_string();
+
+        write_to_debug_file(target, &content, header, Some(&origin)).map_err(|e| {
+            eprintln!("odebug: could not write the log: {e}");
+            crate::Error
+        })
+    }
+
+    fn flush(&self) {
+        flush();
+    }
+}
+
+/// Installs [`FileSink`] unless something is already installed.
+///
+/// Called by the macro before every entry, which is once per entry and a load and a branch
+/// when a sink is already there. Doing it lazily rather than at startup is what keeps this
+/// crate free of any initialisation a consumer has to remember.
+pub fn install_default_sink() {
+    if crate::sink().is_none() {
+        static HOLDER: &dyn crate::Sink = &FileSink;
+        crate::install_sink_ref(&HOLDER);
+    }
+}
