@@ -21,8 +21,9 @@ repository = "https://github.com/orgrinrt/odebug"
 [dependencies]
 # The receive contract a sink implements: `Emit<Entry>` is `notko::sink::Emit`, so this crate
 # does not declare a receive trait of its own. notko is not on crates.io yet, so this is a git
-# dependency, and it moves to `dev` once the branch it names is merged.
-notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "feat/receive-contract", default-features = false }
+# dependency, and it tracks `dev` rather than a feature branch, so a merge upstream does not
+# break this build the instant it lands.
+notko = { git = "https://github.com/orgrinrt/notko.git", branch = "dev", default-features = false }
 
 [features]
 default = ["use_workspace", "output_to_target"]
@@ -56,3 +57,4 @@ criterion = { version = "0.5", default-features = false, features = ["cargo_benc
 [[bench]]
 name = "write"
 harness = false
+
