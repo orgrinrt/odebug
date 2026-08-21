@@ -1,8 +1,9 @@
 [package]
 name = "odebug"
 authors = ["orgrinrt", "Hiisi Digital"]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
+rust-version = "1.70"
 description = """
 Debug logging utility that writes to text files, practical especially during proc-macro compilation.
 """
@@ -15,14 +16,22 @@ homepage = "https://github.com/orgrinrt/odebug"
 repository = "https://github.com/orgrinrt/odebug"
 
 [dependencies]
-once_cell = "1.21.1"
-
 
 [features]
 default = ["use_workspace", "output_to_target"]
 use_workspace = []
 output_to_target = []
 always_log = []
+# Keeps each file open behind a buffer. Much faster and loses whatever is unflushed
+# if the process dies, which for a debug log is when it matters most.
+buffered = []
 test_suite_a = []
 test_suite_b = ["use_workspace"]
 test_suite_c = ["output_to_target"]
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "write"
+harness = false
