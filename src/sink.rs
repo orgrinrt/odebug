@@ -237,3 +237,57 @@ pub(crate) fn reset() {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     *guard = None;
 }
+
+/// The file writer, as a [`Sink`].
+///
+/// This crate's own destination and the one a procedural macro wants: it runs inside the
+/// compiler, where `println!` goes somewhere nobody is reading. Installed automatically on
+/// the first entry, so nothing has to be set up to use `odebug!`, and replaceable by
+/// installing another sink.
+///
+/// [`Sink`]: crate::Sink
+#[derive(Debug, Clone, Copy)]
+pub struct FileSink;
+
+impl notko::sink::Emit<crate::Entry<'_>> for FileSink {
+    type Err = crate::Error;
+
+    fn emit(&self, entry: crate::Entry<'_>) -> notko::Outcome<(), Self::Err> {
+        // Formatted here rather than at the call site, because that is the difference this
+        // sink's having an allocator buys: the entry arrives as `Arguments` and this is
+        // where somewhere-to-put-it exists.
+        let content = entry.content.to_string();
+        let origin = entry.origin.to_string();
+
+        match write_to_debug_file(entry.target, &content, entry.header, Some(&origin)) {
+            Ok(()) => notko::Outcome::Ok(()),
+            Err(e) => {
+                eprintln!("odebug: could not write the log: {e}");
+                notko::Outcome::Err(crate::Error)
+            },
+        }
+    }
+}
+
+impl crate::Sink for FileSink {
+    fn flush(&self) {
+        // Reported rather than discarded. Every other failure in this crate reaches stderr,
+        // and a flush that silently fails is the one that loses entries: `buffered` holds
+        // them until this runs, so a refusal here is data gone rather than data delayed.
+        if let Err(e) = flush() {
+            eprintln!("odebug: could not flush the log: {e}");
+        }
+    }
+}
+
+/// Installs [`FileSink`] unless something is already installed.
+///
+/// Called by the macro before every entry, which is once per entry and a load and a branch
+/// when a sink is already there. Doing it lazily rather than at startup is what keeps this
+/// crate free of any initialisation a consumer has to remember.
+pub fn install_default_sink() {
+    if crate::sink().is_none() {
+        static HOLDER: &dyn crate::Sink = &FileSink;
+        crate::install_sink_ref(&HOLDER);
+    }
+}

@@ -3,7 +3,10 @@ name = "odebug"
 authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.70"
+# notko is edition 2024 and declares 1.85, and taking the receive contract from it brings that
+# floor along. 1.70 was already a claim consumers could not act on: `core::ptr::from_ref` is
+# 1.76 and `clear_poison` is 1.77, both of which this crate uses.
+rust-version = "1.85"
 description = """
 Debug logging utility that writes to text files, practical especially during proc-macro compilation.
 """
@@ -16,6 +19,11 @@ homepage = "https://github.com/orgrinrt/odebug"
 repository = "https://github.com/orgrinrt/odebug"
 
 [dependencies]
+# The receive contract a sink implements: `Emit<Entry>` is `notko::sink::Emit`, so this crate
+# does not declare a receive trait of its own. notko is not on crates.io yet, so this is a git
+# dependency, and it tracks `dev` rather than a feature branch, so a merge upstream does not
+# break this build the instant it lands.
+notko = { git = "https://github.com/orgrinrt/notko.git", branch = "dev", default-features = false }
 
 [features]
 default = ["use_workspace", "output_to_target"]
@@ -28,6 +36,20 @@ buffered = []
 test_suite_a = []
 test_suite_b = ["use_workspace"]
 test_suite_c = ["output_to_target"]
+# Compiles the file writer out, along with the three flags that only say where it puts
+# its files. What is left is the macro and the `Sink` contract, and a consumer installs
+# whatever it has: a serial port, a ring buffer in RAM, a semihosting channel.
+#
+# Nothing is installed by default under this, because there is nothing sensible to
+# default to. An entry written before a sink is installed is reported as a refusal and
+# dropped, which is what a debug log should do rather than halt the program it is
+# debugging.
+no_std = []
+# Implies `no_std`. The macro builds no `String` under any selection: an entry is a
+# `core::fmt::Arguments` and the sink formats it into wherever it writes. So this adds
+# nothing and takes nothing away, and states that the path from a call to a sink
+# allocates nowhere.
+no_alloc = ["no_std"]
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
@@ -35,3 +57,4 @@ criterion = { version = "0.5", default-features = false, features = ["cargo_benc
 [[bench]]
 name = "write"
 harness = false
+
