@@ -28,6 +28,20 @@ buffered = []
 test_suite_a = []
 test_suite_b = ["use_workspace"]
 test_suite_c = ["output_to_target"]
+# Compiles the file writer out, along with the three flags that only say where it puts
+# its files. What is left is the macro and the `Sink` contract, and a consumer installs
+# whatever it has: a serial port, a ring buffer in RAM, a semihosting channel.
+#
+# Nothing is installed by default under this, because there is nothing sensible to
+# default to. An entry written before a sink is installed is reported as a refusal and
+# dropped, which is what a debug log should do rather than halt the program it is
+# debugging.
+no_std = []
+# Implies `no_std`. The macro builds no `String` under any selection: an entry is a
+# `core::fmt::Arguments` and the sink formats it into wherever it writes. So this adds
+# nothing and takes nothing away, and states that the path from a call to a sink
+# allocates nowhere.
+no_alloc = ["no_std"]
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }

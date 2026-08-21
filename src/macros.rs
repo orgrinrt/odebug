@@ -14,13 +14,26 @@
 #[macro_export]
 macro_rules! __odebug_emit {
     ($file:expr, $header:expr, $content:expr) => {{
-        $crate::write_to_debug_file(
+        // `format_args!` rather than a built `String`. It costs nothing, and it is what lets
+        // a sink with no allocator write the entry: it formats straight into wherever it
+        // writes, instead of being handed something already built out of a heap it does not
+        // have.
+        // The file writer installs itself on the first entry, so nothing has to be set up
+        // to use this macro. A consumer that installed its own sink already keeps it: this
+        // only fills an empty slot.
+        //
+        // Called unconditionally, with the feature decided on this crate's side. A
+        // `#[cfg(feature = ..)]` written here would be evaluated where the macro expands,
+        // which is the consumer's crate, so it would read the consumer's features and find
+        // nothing by that name.
+        $crate::install_default_sink();
+
+        let _ = $crate::emit(
             $file,
-            &$content,
+            $content,
             $header,
-            Some(&format!("{}:{}", file!(), line!())),
-        )
-        .unwrap_or_else(|e| eprintln!("odebug: could not write the log: {e}"))
+            ::core::format_args!("{}:{}", ::core::file!(), ::core::line!()),
+        );
     }};
 }
 
@@ -114,57 +127,57 @@ macro_rules! __odebug_dispatch {
     // A file and a header, named as a path: `parser::Trace("...")`.
     ($file:ident::$header:ident($fmt:expr $(, $arg:tt)* $(,)?)) => {
         $crate::__odebug_emit!(
-            &format!("{}.log", stringify!($file)),
+            ::core::concat!(::core::stringify!($file), ".log"),
             Some(stringify!($header)),
-            format!($fmt $(, $arg)*)
+            ::core::format_args!($fmt $(, $arg)*)
         )
     };
 
     // A file with no header: `parser::("...")`.
     ($file:ident::($fmt:expr $(, $arg:tt)* $(,)?)) => {
         $crate::__odebug_emit!(
-            &format!("{}.log", stringify!($file)),
+            ::core::concat!(::core::stringify!($file), ".log"),
             None,
-            format!($fmt $(, $arg)*)
+            ::core::format_args!($fmt $(, $arg)*)
         )
     };
 
     // A header with no file: `::Trace("...")`.
     (::$header:ident($fmt:expr $(, $arg:tt)* $(,)?)) => {
-        $crate::__odebug_emit!("debug.log", Some(stringify!($header)), format!($fmt $(, $arg)*))
+        $crate::__odebug_emit!("debug.log", Some(stringify!($header)), ::core::format_args!($fmt $(, $arg)*))
     };
 
     // A file named by a string: `"out.log" => "..."`.
     ($file:expr => $fmt:expr $(, $arg:tt)* $(,)?) => {
-        $crate::__odebug_emit!($file, None, format!($fmt $(, $arg)*))
+        $crate::__odebug_emit!($file, None, ::core::format_args!($fmt $(, $arg)*))
     };
 
     // Chained, on a literal or a binding. Both spellings exist because a `tt` cannot be
     // followed by `.` in a matcher, so the content has to be captured by fragment kind.
     ($content:literal.to_file($file:expr).with_header($header:expr)) => {
-        $crate::__odebug_emit!($file, Some(&$header.to_string()), $content.to_string())
+        $crate::__odebug_emit!($file, Some(::core::convert::AsRef::<str>::as_ref(&$header)), ::core::format_args!("{}", $content))
     };
     ($content:ident.to_file($file:expr).with_header($header:expr)) => {
-        $crate::__odebug_emit!($file, Some(&$header.to_string()), $content.to_string())
+        $crate::__odebug_emit!($file, Some(::core::convert::AsRef::<str>::as_ref(&$header)), ::core::format_args!("{}", $content))
     };
     ($content:literal.to_file($file:expr)) => {
-        $crate::__odebug_emit!($file, None, $content.to_string())
+        $crate::__odebug_emit!($file, None, ::core::format_args!("{}", $content))
     };
     ($content:ident.to_file($file:expr)) => {
-        $crate::__odebug_emit!($file, None, $content.to_string())
+        $crate::__odebug_emit!($file, None, ::core::format_args!("{}", $content))
     };
     ($content:literal.with_header($header:expr)) => {
-        $crate::__odebug_emit!("debug.log", Some(&$header.to_string()), $content.to_string())
+        $crate::__odebug_emit!("debug.log", Some(::core::convert::AsRef::<str>::as_ref(&$header)), ::core::format_args!("{}", $content))
     };
     ($content:ident.with_header($header:expr)) => {
-        $crate::__odebug_emit!("debug.log", Some(&$header.to_string()), $content.to_string())
+        $crate::__odebug_emit!("debug.log", Some(::core::convert::AsRef::<str>::as_ref(&$header)), ::core::format_args!("{}", $content))
     };
 
     // Plain content, with or without format arguments.
     ($fmt:expr, $($arg:tt)+) => {
-        $crate::__odebug_emit!("debug.log", None, format!($fmt, $($arg)+))
+        $crate::__odebug_emit!("debug.log", None, ::core::format_args!($fmt, $($arg)+))
     };
     ($content:expr) => {
-        $crate::__odebug_emit!("debug.log", None, $content.to_string())
+        $crate::__odebug_emit!("debug.log", None, ::core::format_args!("{}", $content))
     };
 }
