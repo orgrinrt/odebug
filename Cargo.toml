@@ -3,7 +3,10 @@ name = "odebug"
 authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.70"
+# notko is edition 2024 and declares 1.85, and taking the receive contract from it brings that
+# floor along. 1.70 was already a claim consumers could not act on: `core::ptr::from_ref` is
+# 1.76 and `clear_poison` is 1.77, both of which this crate uses.
+rust-version = "1.85"
 description = """
 Debug logging utility that writes to text files, practical especially during proc-macro compilation.
 """
@@ -16,6 +19,10 @@ homepage = "https://github.com/orgrinrt/odebug"
 repository = "https://github.com/orgrinrt/odebug"
 
 [dependencies]
+# The receive contract a sink implements: `Emit<Entry>` is `notko::sink::Emit`, so this crate
+# does not declare a receive trait of its own. notko is not on crates.io yet, so this is a git
+# dependency, and it moves to `dev` once the branch it names is merged.
+notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "feat/receive-contract", default-features = false }
 
 [features]
 default = ["use_workspace", "output_to_target"]

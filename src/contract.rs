@@ -9,6 +9,11 @@
 //! So the destination is a [`Sink`], the file writer is one implementation of it, and a
 //! consumer that has somewhere else to put an entry says so once.
 //!
+//! [`Sink`] is not a contract this crate invents. Receiving an item is
+//! [`notko::sink::Emit`], which is where a stack-wide contract belongs and where anything
+//! else needing one will look. What this crate adds on top of it is [`Entry`], which names
+//! the four pieces of a debug entry, and the global install below.
+//!
 //! An entry arrives as [`core::fmt::Arguments`] rather than as a formatted string, which is
 //! what `format_args!` produces and what costs nothing to build. A sink with somewhere to
 //! write formats straight into it; a sink with an allocator may build a `String` if it
@@ -17,30 +22,41 @@
 use core::fmt;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+use notko::sink::Emit;
+
+/// One debug entry, as a value.
+///
+/// Four pieces rather than a formatted line, because a sink knows better than this crate what
+/// to do with them: the file writer treats `target` as a filename and separates entries with
+/// a rule, and one writing to a serial port may reasonably keep `content` and drop the rest.
+///
+/// `content` and `origin` are [`core::fmt::Arguments`] rather than strings, which is what
+/// `format_args!` produces and what costs nothing to build. A sink with somewhere to write
+/// formats straight into it; one with an allocator may build a `String` if it prefers.
+/// Neither choice is made here, and no entry allocates on the way.
+#[derive(Clone, Copy)]
+pub struct Entry<'a> {
+    /// What the call named. A filename to the file writer, a channel or a topic elsewhere.
+    pub target: &'a str,
+    /// The entry itself.
+    pub content: fmt::Arguments<'a>,
+    /// The optional label the call gave.
+    pub header: Option<&'a str>,
+    /// The file and line the call came from.
+    pub origin: fmt::Arguments<'a>,
+}
+
 /// Where a debug entry goes.
 ///
-/// One method, because there is one thing to do with an entry. What a sink does with the
-/// four pieces is its business: the file writer separates entries with a rule and prefixes
-/// each with its origin, and a sink writing to a serial port may reasonably drop everything
-/// but the content.
-pub trait Sink: Sync {
-    /// Writes one entry.
-    ///
-    /// `target` is what the call named, which the file writer treats as a filename and
-    /// another sink may treat as a channel, a topic, or nothing at all. `header` is the
-    /// optional label the call gave, and `origin` is the file and line it came from.
-    ///
-    /// Returns `Err` when the entry could not be written. The macro reports a failure and
-    /// carries on, because a debug log that halts the program it is debugging has stopped
-    /// being a debug log.
-    fn write_entry(
-        &self,
-        target: &str,
-        content: fmt::Arguments<'_>,
-        header: Option<&str>,
-        origin: fmt::Arguments<'_>,
-    ) -> Result<(), Error>;
-
+/// A [`notko::sink::Emit`] of [`Entry`] that reports [`Error`], plus a flush. The `Emit` is
+/// where the work is; this trait exists so the global holder below has one name to store, and
+/// so `flush` has somewhere to live.
+///
+/// Implementing it is one empty line, `impl Sink for MySink {}`, unless the sink holds
+/// something and wants `flush` to mean something. A blanket impl would save that line and
+/// take `flush` away with it, since a type cannot override a method of an impl it did not
+/// write.
+pub trait Sink: for<'a> Emit<Entry<'a>, Err = Error> + Sync {
     /// Flushes whatever is held, if anything is.
     ///
     /// The default does nothing, which is right for a sink that writes through.
@@ -74,22 +90,19 @@ static SINK: AtomicPtr<&'static dyn Sink> = AtomicPtr::new(core::ptr::null_mut()
 /// Installs the sink every entry goes to, replacing whatever was there.
 ///
 /// ```
-/// use core::fmt;
-/// use odebug::{install_sink, Error, Sink};
+/// use odebug::{install_sink, Emit, Entry, Error, Outcome};
 ///
 /// struct Discard;
 ///
-/// impl Sink for Discard {
-///     fn write_entry(
-///         &self,
-///         _target: &str,
-///         _content: fmt::Arguments<'_>,
-///         _header: Option<&str>,
-///         _origin: fmt::Arguments<'_>,
-///     ) -> Result<(), Error> {
-///         Ok(())
+/// impl Emit<Entry<'_>> for Discard {
+///     type Err = Error;
+///
+///     fn emit(&self, _entry: Entry<'_>) -> Outcome<(), Self::Err> {
+///         Outcome::Ok(())
 ///     }
 /// }
+///
+/// impl odebug::Sink for Discard {}
 ///
 /// install_sink!(Discard);
 /// assert!(odebug::sink().is_some());
@@ -148,5 +161,17 @@ pub fn emit(
     header: Option<&str>,
     origin: fmt::Arguments<'_>,
 ) -> Result<(), Error> {
-    sink().ok_or(Error)?.write_entry(target, content, header, origin)
+    let entry = Entry {
+        target,
+        content,
+        header,
+        origin,
+    };
+    // `Outcome` is notko's, and this crate's own surface reports `Result`, because a consumer
+    // implementing a sink meets `Outcome` there and a consumer calling the macro meets
+    // neither. Converting here keeps notko out of the macro's expansion.
+    match sink().ok_or(Error)?.emit(entry) {
+        notko::Outcome::Ok(()) => Ok(()),
+        notko::Outcome::Err(error) => Err(error),
+    }
 }

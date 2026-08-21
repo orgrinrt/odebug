@@ -13,7 +13,7 @@ use core::cell::UnsafeCell;
 use core::fmt::{self, Write};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use odebug::{odebug, Error, Sink};
+use odebug::{odebug, Emit, Entry, Error, Outcome, Sink};
 
 /// How much of an entry this keeps.
 const CAPACITY: usize = 512;
@@ -71,28 +71,34 @@ impl Write for Cursor<'_> {
     }
 }
 
-impl Sink for Buffer {
-    fn write_entry(
-        &self,
-        target: &str,
-        content: fmt::Arguments<'_>,
-        header: Option<&str>,
-        origin: fmt::Arguments<'_>,
-    ) -> Result<(), Error> {
+impl Emit<Entry<'_>> for Buffer {
+    type Err = Error;
+
+    fn emit(&self, entry: Entry<'_>) -> Outcome<(), Self::Err> {
         let mut cursor = Cursor(self);
 
-        // Formatted straight into the buffer. The entry arrived as `Arguments`, so there is
-        // no intermediate string anywhere: this is the whole reason the contract carries
+        // Formatted straight into the buffer. The entry arrived carrying `Arguments`, so
+        // there is no intermediate string anywhere: this is the whole reason `Entry` holds
         // `Arguments` rather than a `&str`.
-        write!(cursor, "[{target}]").map_err(|_| Error)?;
-        if let Some(header) = header {
-            write!(cursor, "[{header}]").map_err(|_| Error)?;
-        }
-        write!(cursor, " {content} ({origin})\n").map_err(|_| Error)?;
+        let written = (|| {
+            write!(cursor, "[{}]", entry.target)?;
+            if let Some(header) = entry.header {
+                write!(cursor, "[{header}]")?;
+            }
+            writeln!(cursor, " {} ({})", entry.content, entry.origin)
+        })();
 
-        Ok(())
+        match written {
+            Ok(()) => Outcome::Ok(()),
+            Err(_) => Outcome::Err(Error),
+        }
     }
 }
+
+// One empty line, because `Emit` above is where the work is. It is not blanket-implemented:
+// a type cannot override a method of an impl it did not write, and `flush` is a method a sink
+// holding something wants to override.
+impl Sink for Buffer {}
 
 static BUFFER: Buffer = Buffer::new();
 

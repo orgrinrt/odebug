@@ -9,7 +9,12 @@ mod macros;
 #[cfg(not(feature = "no_std"))]
 mod sink;
 
-pub use contract::{emit, install_sink_ref, sink, Error, Sink};
+pub use contract::{emit, install_sink_ref, sink, Entry, Error, Sink};
+// Re-exported so a consumer writing a sink names one crate rather than two. The contract is
+// notko's, deliberately, and a consumer of this crate has no reason to acquire a dependency
+// on it just to spell the trait it is implementing.
+pub use notko::sink::Emit;
+pub use notko::Outcome;
 
 /// Installs the default sink, where there is one.
 ///
