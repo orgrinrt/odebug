@@ -1,6 +1,5 @@
 [package]
 name = "odebug"
-authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.2.0"
 edition = "2021"
 # notko is edition 2024 and declares 1.85, and taking the receive contract from it brings that
@@ -13,6 +12,7 @@ Debug logging utility that writes to text files, practical especially during pro
 license = "MPL-2.0"
 readme = "README.md"
 keywords = ["debug", "logging", "proc-macro", "development", "file-logger"]
+exclude = [".idea/", "target/"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "development-tools::debugging", "development-tools::testing"]
 documentation = "https://docs.rs/odebug"
 homepage = "https://github.com/orgrinrt/odebug"
@@ -23,7 +23,7 @@ repository = "https://github.com/orgrinrt/odebug"
 # does not declare a receive trait of its own. notko is not on crates.io yet, so this is a git
 # dependency, and it tracks `dev` rather than a feature branch, so a merge upstream does not
 # break this build the instant it lands.
-notko = { git = "https://github.com/orgrinrt/notko.git", branch = "dev", default-features = false }
+notko = { git = "https://github.com/orgrinrt/notko.git", branch = "dev", version = "0.0.1", default-features = false }
 
 [features]
 default = ["use_workspace", "output_to_target"]
