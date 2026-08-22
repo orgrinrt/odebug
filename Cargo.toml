@@ -1,6 +1,5 @@
 [package]
 name = "odebug"
-authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.2.0"
 edition = "2021"
 # notko is edition 2024 and declares 1.85, and taking the receive contract from it brings that
@@ -13,6 +12,7 @@ Debug logging utility that writes to text files, practical especially during pro
 license = "MPL-2.0"
 readme = "README.md"
 keywords = ["debug", "logging", "proc-macro", "development", "file-logger"]
+exclude = [".idea/", "target/"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "development-tools::debugging", "development-tools::testing"]
 documentation = "https://docs.rs/odebug"
 homepage = "https://github.com/orgrinrt/odebug"

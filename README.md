@@ -20,6 +20,19 @@
 - No dependencies at all
 - Compiles to nothing outside debug builds, unless `always_log` says otherwise
 
+## Installation
+
+```bash
+cargo add odebug
+```
+
+Or in `Cargo.toml`:
+
+```toml
+[dependencies]
+odebug = "0.2"
+```
+
 ## Usage
 
 ```rust
@@ -132,7 +145,7 @@ exit tidily, and call `odebug::flush()` before it does.
 A log file is truncated on the first write of a run, so it describes one run rather than
 accumulating across them.
 
-## The Problem
+## The problem
 
 Debugging complex code flows, especially in proc-macros, can be challenging, often feeling like the usual tools in your toolbox are limited or unhelpful. Print statements often get lost in compiler output or don't work at all in certain contexts. Stepping through code with a debugger can be tedious and time-consuming with proc macros, especially when dealing with large codebases and complex expansions. It's also so very easy to end up in an all-inclusive stepping tour through the
 `syn`, `quote`, and `proc_macro2` crates.
