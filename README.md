@@ -1,13 +1,14 @@
-# odebug
+# `odebug`
 
-<div style="text-align: center;">
+<div align="center" style="text-align: center;">
 
 [![GitHub Stars](https://img.shields.io/github/stars/orgrinrt/odebug.svg)](https://github.com/orgrinrt/odebug/stargazers)
-[![Crates.io Total Downloads](https://img.shields.io/crates/d/odebug)](https://crates.io/crates/odebug)
+[![Crates.io](https://img.shields.io/crates/v/odebug)](https://crates.io/crates/odebug)
+[![docs.rs](https://img.shields.io/docsrs/odebug)](https://docs.rs/odebug)
 [![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/odebug.svg)](https://github.com/orgrinrt/odebug/issues)
-[![Current Version](https://img.shields.io/badge/version-0.2.0-red.svg)](https://github.com/orgrinrt/odebug)
+![License](https://img.shields.io/github/license/orgrinrt/odebug?color=%23009689)
 
-> Debug logging utility that writes to text files, practical especially during proc-macro compilation.
+> Debug logging into text files, which is what you have during proc-macro compilation.
 
 </div>
 
@@ -148,6 +149,8 @@ Whether you use this project, have learned something from it, or just like it, p
 
 ## License
 
-> You can check out the full license [here](https://github.com/orgrinrt/odebug/blob/main/LICENSE)
+> The project is licensed under the **Mozilla Public License 2.0**.
 
-This project is licensed under the terms of the **MPL-2.0** license.
+`SPDX-License-Identifier: MPL-2.0`
+
+> You can check out the full license [here](https://github.com/orgrinrt/odebug/blob/dev/LICENSE)
