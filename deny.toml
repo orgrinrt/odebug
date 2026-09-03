@@ -10,7 +10,7 @@ feature-depth = 1
 
 [advisories]
 # More info: https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
-db-path = ["$CARGO_HOME/advisory-dbs"]
+db-path = "$CARGO_HOME/advisory-dbs"
 db-urls = ["https://github.com/RustSec/advisory-db"]
 ignore = []
 
@@ -48,7 +48,7 @@ skip-tree = []
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = []
+allow-git = ["https://github.com/orgrinrt/notko.git"]
 
 [sources.allow-org]
 github = [""]
