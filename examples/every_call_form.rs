@@ -4,9 +4,9 @@
 //! and the content. The forms below are the ways of naming them, from the shortest to the
 //! most explicit, and they exist because a debug line is written in a hurry and read once.
 //!
-//! Files land in `.debug/` beside the workspace root under the default features. This
-//! example prints where that is and then lists what it wrote, so the output is checkable
-//! rather than a claim.
+//! Files land in `target/odebug/` under the default features. This example prints where
+//! that resolved to and then lists what it wrote, so the output is checkable rather than a
+//! claim.
 
 #[cfg(not(feature = "no_std"))]
 use odebug::odebug;
@@ -55,12 +55,9 @@ fn main() {
     odebug!(message.with_header("NOTE"));
     odebug!(message.to_file("codegen.log").with_header("NOTE"));
 
-    // Nothing above returns anything or can fail from the caller's side. A refusal reaches
-    // stderr and the program carries on, because a debug log that halts what it is debugging
-    // has stopped being a debug log.
-    // Nothing above returns anything or can fail from the caller's side. A refusal reaches
-    // stderr and the program carries on, because a debug log that halts what it is debugging
-    // has stopped being a debug log.
+    // Nothing above returns anything or can fail from the caller's side. A refusal from the
+    // file writer reaches stderr and the program carries on, because a debug log that halts
+    // what it is debugging has stopped being a debug log.
     let dir = odebug::debug_dir();
     println!("wrote into {}", dir.display());
 
