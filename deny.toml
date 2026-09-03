@@ -1,5 +1,7 @@
 [graph]
-targets = ["bins", "tests", "benches", "examples", "libs"]
+# target triples, so an empty list is every target; the kind names that were
+# here made cargo-deny warn once per entry and evaluate none of them
+targets = []
 exclude = []
 all-features = true
 no-default-features = false
@@ -10,7 +12,7 @@ feature-depth = 1
 
 [advisories]
 # More info: https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
-db-path = ["$CARGO_HOME/advisory-dbs"]
+db-path = "$CARGO_HOME/advisory-dbs"
 db-urls = ["https://github.com/RustSec/advisory-db"]
 ignore = []
 

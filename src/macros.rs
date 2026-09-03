@@ -39,12 +39,12 @@ macro_rules! __odebug_emit {
 
 /// Logs debug information to a file, and compiles to nothing in release builds.
 ///
-/// It writes to files, which is the point: a procedural macro runs inside the compiler,
-/// where `println!` goes somewhere nobody is reading. Each entry carries the file and line
-/// it came from.
+/// It writes to files, which is the point, as a procedural macro runs inside the compiler
+/// where `println!` goes somewhere nobody is reading, and each entry carries the file and
+/// line it came from.
 ///
 /// Active in debug builds, or in any build with the `always_log` feature. Without either,
-/// the whole invocation expands to nothing and its arguments are not evaluated.
+/// the whole invocation expands to nothing and its arguments aren't evaluated either.
 ///
 /// # The forms
 ///
@@ -60,8 +60,10 @@ macro_rules! __odebug_emit {
 /// | `odebug!("text".with_header("H"))` | `debug.log` | `H` |
 /// | `odebug!("text".to_file("out.log").with_header("H"))` | `out.log` | `H` |
 ///
-/// Every one of them also takes format arguments, and every one is asserted in the test
-/// suite against the file it claims to write.
+/// Each of them takes format arguments as well, and each is checked in the test suite
+/// against the file it claims to write. Do note that the chained forms are patterns the
+/// macro matches rather than method calls, so the content there is a string literal or a
+/// plain binding, while the file and the header are ordinary expressions.
 ///
 /// # Examples
 ///

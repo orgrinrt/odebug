@@ -111,18 +111,18 @@ pub(crate) fn declares_a_workspace(manifest: &str) -> bool {
 
 /// The open log files, keyed by name.
 ///
-/// Opening the file per line cost about 23 microseconds against 5.0 for this function
-/// with the file already open, measured in `benches/write.rs`. A build that logs a few
-/// thousand lines spends the difference in the compiler, where it is felt.
+/// Kept open because opening the file per line comes out a few times slower than writing
+/// through `write_to_debug_file` with the handle already here, measured in
+/// `benches/write.rs`, and a build that logs a few thousand lines spends that difference
+/// inside the compiler, where it is felt. The absolute figures move a lot with the machine
+/// so none are quoted; the bench keeps every alternative as an arm and answers for the
+/// machine it runs on. The arm that only keeps a handle and writes reads faster still, but
+/// no caller can obtain that, since the lock and the map lookup are part of the cost.
 ///
-/// Those are the figures for `write_to_debug_file` itself. An arm in the same bench that
-/// only keeps a handle and writes reads 3.5, and quoting that here would be quoting
-/// something no caller can obtain: the lock and the map lookup are part of the cost.
-///
-/// Unbuffered on purpose. A buffer takes the shipped path to about 0.2 microseconds and
-/// loses whatever has not been flushed when the process dies, which for a debug log is the
-/// moment the contents matter most. The `buffered` feature is there for logging in bulk
-/// from something that will exit tidily.
+/// Unbuffered on purpose. A buffer takes another order of magnitude or two off and loses
+/// whatever hasn't been flushed when the process dies, which for a debug log is the moment
+/// the contents matter most. The `buffered` feature is there for logging in bulk from
+/// something that will exit tidily.
 static FILES: Mutex<Option<HashMap<String, Sink>>> = Mutex::new(None);
 
 #[cfg(not(feature = "buffered"))]
@@ -240,10 +240,10 @@ pub(crate) fn reset() {
 
 /// The file writer, as a [`Sink`].
 ///
-/// This crate's own destination and the one a procedural macro wants: it runs inside the
-/// compiler, where `println!` goes somewhere nobody is reading. Installed automatically on
-/// the first entry, so nothing has to be set up to use `odebug!`, and replaceable by
-/// installing another sink.
+/// The default destination, and the one a procedural macro wants, given that it runs
+/// inside the compiler and has no stdout anybody reads. Installed on the first entry
+/// unless something else already is, so nothing has to be set up to use `odebug!`, and
+/// replaced by installing another sink.
 ///
 /// [`Sink`]: crate::Sink
 #[derive(Debug, Clone, Copy)]

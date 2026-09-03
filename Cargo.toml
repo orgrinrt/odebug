@@ -20,10 +20,8 @@ repository = "https://github.com/orgrinrt/odebug"
 
 [dependencies]
 # The receive contract a sink implements: `Emit<Entry>` is `notko::sink::Emit`, so this crate
-# does not declare a receive trait of its own. notko is not on crates.io yet, so this is a git
-# dependency, and it tracks `dev` rather than a feature branch, so a merge upstream does not
-# break this build the instant it lands.
-notko = { git = "https://github.com/orgrinrt/notko.git", branch = "dev", version = "0.0.1", default-features = false }
+# does not declare a receive trait of its own.
+notko = { version = "0.0.1", default-features = false }
 
 [features]
 default = ["use_workspace", "output_to_target"]
@@ -41,9 +39,9 @@ test_suite_c = ["output_to_target"]
 # whatever it has: a serial port, a ring buffer in RAM, a semihosting channel.
 #
 # Nothing is installed by default under this, because there is nothing sensible to
-# default to. An entry written before a sink is installed is reported as a refusal and
-# dropped, which is what a debug log should do rather than halt the program it is
-# debugging.
+# default to. An entry written before a sink is installed is dropped, and nothing reports
+# it, since there is nowhere to report it to; a debug log should not halt the program it
+# is debugging over that.
 no_std = []
 # Implies `no_std`. The macro builds no `String` under any selection: an entry is a
 # `core::fmt::Arguments` and the sink formats it into wherever it writes. So this adds
