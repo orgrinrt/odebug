@@ -224,6 +224,36 @@ blanket impl: a sink holding something wants to override it, and a type can't ov
 method of an impl it didn't write. The `examples/` directory has a working in-memory sink,
 and another file that goes through every form the macro takes.
 
+Two sinks ship besides the file writer. `Ring<N>` keeps the last `N` bytes of what it was
+given in a fixed array, formatting each entry straight into it, so it is the one for a
+`no_std` consumer with a fixed amount of RAM and for a test that wants the entries in
+memory; once full, the oldest bytes go first, so what it holds is the tail of the log, which
+is the half a crash is explained by. `Stderr` writes each entry to stderr in the file
+writer's shape, for a build script or a binary where somebody is reading it:
+
+```rust
+use odebug::{install_sink, odebug, Ring};
+
+static LOG: Ring<1024> = Ring::new();
+static HOLDER: &dyn odebug::Sink = &LOG;
+odebug::install_sink_ref(&HOLDER);
+
+odebug!(parser::Tokens("{} of them", 12));
+
+let mut out = [0u8; 1024];
+let n = LOG.read_into(&mut out);
+let held = core::str::from_utf8(&out[.. n]).unwrap();
+assert!(held.contains("[parser.log][Tokens] 12 of them"));
+```
+
+`read_into` copies the oldest bytes first and consumes nothing, and `contents()` gives the
+same as a `String` where `std` is there to build one.
+
+The file writer itself formats an entry straight into the open handle. Nothing is built for
+an entry between the call and the file, which on the path the crate is for, a build writing
+thousands of lines, is two allocations a line that used to be there; `benches/write.rs` has
+that path as an arm of its own.
+
 ### Limitations
 
 There are no levels and no timestamps, and probably won't be, as the crate is

@@ -6,10 +6,16 @@
 // compiler, where nobody reads stdout, and that is a good default and a poor requirement.
 mod contract;
 mod macros;
+mod ring;
 #[cfg(not(feature = "no_std"))]
 mod sink;
+#[cfg(not(feature = "no_std"))]
+mod stderr;
 
 pub use contract::{emit, install_sink_ref, sink, Entry, Error, Sink};
+pub use ring::Ring;
+#[cfg(not(feature = "no_std"))]
+pub use stderr::Stderr;
 // Re-exported so a consumer writing a sink names one crate rather than two. The contract is
 // notko's, deliberately, and a consumer of this crate has no reason to acquire a dependency
 // on it just to spell the trait it is implementing.
@@ -27,7 +33,9 @@ pub use notko::Outcome;
 #[inline]
 pub fn install_default_sink() {}
 #[cfg(not(feature = "no_std"))]
-pub use sink::{debug_dir, flush, install_default_sink, write_to_debug_file, FileSink};
+pub use sink::{
+    debug_dir, flush, install_default_sink, write_entry, write_to_debug_file, FileSink,
+};
 
 #[cfg(all(test, not(feature = "no_std")))]
 mod tests;

@@ -1,5 +1,6 @@
 //! Where the log goes, and how it gets there.
 
+use core::fmt;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -139,10 +140,52 @@ fn wrap(file: File) -> Sink {
     std::io::BufWriter::new(file)
 }
 
+/// Writes one entry in the shape the file writer uses, to anything that is `io::Write`.
+///
+/// A rule, a line naming the header and the origin, a rule, then the content, or the content
+/// alone on a line of its own where there is neither. `target` is only written where the
+/// destination cannot carry it itself: the file writer's destination is the target, and a
+/// stream shared by every target says which one on the header line.
+///
+/// Everything is `fmt::Arguments` so it is formatted straight into the writer, and no
+/// `String` is built for an entry on its way to a file. The file writer used to format the
+/// content and the origin into two strings first and hand them on as `&str`, which was two
+/// allocations per line on the path the crate is for, where a build writes thousands.
+pub(crate) fn write_shaped(
+    w: &mut impl Write,
+    target: Option<&str>,
+    header: Option<&str>,
+    origin: Option<fmt::Arguments<'_>>,
+    content: fmt::Arguments<'_>,
+) -> std::io::Result<()> {
+    if header.is_none() && origin.is_none() && target.is_none() {
+        return writeln!(w, "\n{content}");
+    }
+    writeln!(w, "\n{SEPARATOR_LINE}")?;
+    w.write_all(b"> ")?;
+    if let Some(target) = target {
+        write!(w, "[{target}]")?;
+        if header.is_some() || origin.is_some() {
+            w.write_all(b" ")?;
+        }
+    }
+    match (header, origin) {
+        (Some(header), Some(origin)) => writeln!(w, "{header} ({origin})")?,
+        (Some(header), None) => writeln!(w, "{header}")?,
+        (None, Some(origin)) => writeln!(w, "[at {origin}]")?,
+        (None, None) => writeln!(w)?,
+    }
+    writeln!(w, "{SEPARATOR_LINE}")?;
+    writeln!(w, "{content}")
+}
+
 /// Writes an entry to a log file, with an optional header and context.
 ///
 /// The first write to a given name in a process truncates the file, so a log describes one
 /// run rather than accumulating across them. Later writes in the same process append.
+///
+/// This takes strings, which is what a caller outside the macro usually has. The macro's
+/// own path is [`write_entry`], which takes `fmt::Arguments` and builds nothing on the way.
 ///
 /// # Errors
 ///
@@ -165,6 +208,32 @@ pub fn write_to_debug_file(
     header: Option<&str>,
     context: Option<&str>,
 ) -> std::io::Result<()> {
+    match context {
+        Some(context) => write_entry(
+            filename,
+            header,
+            Some(format_args!("{context}")),
+            format_args!("{content}"),
+        ),
+        None => write_entry(filename, header, None, format_args!("{content}")),
+    }
+}
+
+/// Writes an entry to a log file, formatting straight into it.
+///
+/// What [`write_to_debug_file`] is the string-taking form of, and what the file sink calls:
+/// the content and the origin arrive as `fmt::Arguments` and are formatted into the open
+/// handle, so nothing is allocated for an entry.
+///
+/// # Errors
+///
+/// Returns the underlying `io::Error` if the file cannot be opened or written.
+pub fn write_entry(
+    filename: &str,
+    header: Option<&str>,
+    origin: Option<fmt::Arguments<'_>>,
+    content: fmt::Arguments<'_>,
+) -> std::io::Result<()> {
     let mut guard = FILES
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -185,27 +254,7 @@ pub fn write_to_debug_file(
         },
     };
 
-    match (header, context) {
-        (Some(header), Some(context)) => {
-            writeln!(sink, "\n{SEPARATOR_LINE}")?;
-            writeln!(sink, "> {header} ({context})")?;
-            writeln!(sink, "{SEPARATOR_LINE}")?;
-            writeln!(sink, "{content}")
-        },
-        (Some(header), None) => {
-            writeln!(sink, "\n{SEPARATOR_LINE}")?;
-            writeln!(sink, "> {header}")?;
-            writeln!(sink, "{SEPARATOR_LINE}")?;
-            writeln!(sink, "{content}")
-        },
-        (None, Some(context)) => {
-            writeln!(sink, "\n{SEPARATOR_LINE}")?;
-            writeln!(sink, "> [at {context}]")?;
-            writeln!(sink, "{SEPARATOR_LINE}")?;
-            writeln!(sink, "{content}")
-        },
-        (None, None) => writeln!(sink, "\n{content}"),
-    }
+    write_shaped(sink, None, header, origin, content)
 }
 
 /// Pushes anything still held in memory out to the files.
@@ -253,13 +302,14 @@ impl notko::sink::Emit<crate::Entry<'_>> for FileSink {
     type Err = crate::Error;
 
     fn emit(&self, entry: crate::Entry<'_>) -> notko::Outcome<(), Self::Err> {
-        // Formatted here rather than at the call site, because that is the difference this
-        // sink's having an allocator buys: the entry arrives as `Arguments` and this is
-        // where somewhere-to-put-it exists.
-        let content = entry.content.to_string();
-        let origin = entry.origin.to_string();
-
-        match write_to_debug_file(entry.target, &content, entry.header, Some(&origin)) {
+        // Formatted straight into the file. The entry arrives as `Arguments`, and the open
+        // handle is somewhere to put it, so nothing is built in between.
+        match write_entry(
+            entry.target,
+            entry.header,
+            Some(entry.origin),
+            entry.content,
+        ) {
             Ok(()) => notko::Outcome::Ok(()),
             Err(e) => {
                 eprintln!("odebug: could not write the log: {e}");

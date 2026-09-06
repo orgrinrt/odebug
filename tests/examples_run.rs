@@ -86,3 +86,32 @@ fn the_own_sink_example_keeps_its_entries_out_of_a_file() {
          or the entries went somewhere else:\n{stdout}"
     );
 }
+
+#[test]
+fn the_stderr_example_writes_its_entries_to_stderr_and_nothing_else() {
+    // The example installs `Stderr`, so every entry has to show up on stderr and none in a
+    // file. The stdout line is what the example prints on its own account; the stderr
+    // lines are the sink's.
+    let output = Command::new(env!("CARGO"))
+        .args(["run", "--quiet", "--example", "to_stderr"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env(
+            "CARGO_TARGET_DIR",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/target/examples-run"),
+        )
+        .output()
+        .expect("cargo runs");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("> [parser.log] Tokens (")
+            && stderr.contains("12 of them")
+            && stderr.contains("a plain line"),
+        "the entries did not reach stderr in the file writer's shape:\n{stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("nothing was written under"),
+        "the example did not report the file that was not written:\n{stdout}"
+    );
+}
