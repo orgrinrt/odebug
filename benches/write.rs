@@ -14,6 +14,9 @@
 //! - `cached_buffered` keeps it open behind a buffer, flushed on drop.
 //! - `shipped` is the crate's own `write_to_debug_file`, so the headline number is
 //!   about the code that ships rather than about a lookalike written here.
+//! - `shipped_sink` is `FileSink::emit`, which is what the macro reaches. It used to
+//!   format the entry into two strings before handing them on; it formats into the
+//!   handle now, and this arm is what says whether that shows.
 
 // Every arm here writes to a file, so the whole bench needs a filesystem and there is none
 // under `no_std`. cargo builds a bench under every feature selection and `required-features`
@@ -114,6 +117,22 @@ fn shipped(_path: &PathBuf, line: &str) {
     odebug::write_to_debug_file("bench_shipped.log", line, None, None).expect("a write");
 }
 
+/// The sink the macro reaches, handed an entry the way the macro builds one.
+#[cfg(not(feature = "no_std"))]
+fn shipped_sink(_path: &PathBuf, line: &str) {
+    use odebug::Emit;
+    let entry = odebug::Entry {
+        target: "bench_sink.log",
+        content: format_args!("{line}"),
+        header: None,
+        origin: format_args!("{}:{}", file!(), line!()),
+    };
+    match odebug::FileSink.emit(entry) {
+        odebug::Outcome::Ok(()) => {},
+        odebug::Outcome::Err(e) => panic!("a write: {e}"),
+    }
+}
+
 #[cfg(not(feature = "no_std"))]
 fn one_line(c: &mut Criterion) {
     let base = dir();
@@ -126,6 +145,7 @@ fn one_line(c: &mut Criterion) {
         ("cached_handle", cached_handle as fn(&PathBuf, &str)),
         ("cached_buffered", cached_buffered as fn(&PathBuf, &str)),
         ("shipped", shipped as fn(&PathBuf, &str)),
+        ("shipped_sink", shipped_sink as fn(&PathBuf, &str)),
     ] {
         let path = base.join(format!("{name}.log"));
         let _ = fs::remove_file(&path);
